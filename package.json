@@ -3,7 +3,8 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --dev-client",
+    "start:prod": "EXPO_PUBLIC_WEB_URL=https://aikinote.com expo start --dev-client",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
@@ -22,6 +23,7 @@
     "@react-navigation/native": "^7.1.8",
     "expo": "~54.0.33",
     "expo-constants": "~18.0.13",
+    "expo-dev-client": "~6.0.20",
     "expo-font": "~14.0.11",
     "expo-image": "~3.0.11",
     "expo-linking": "~8.0.11",

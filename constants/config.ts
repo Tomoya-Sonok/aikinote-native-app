@@ -8,8 +8,26 @@ const getDevBaseUrl = (): string => {
   return "http://localhost:3000";
 };
 
+const getBaseUrl = (): string => {
+  // EXPO_PUBLIC_WEB_URL が指定されていればそれを優先（開発時の接続先切り替え用）
+  const envUrl = process.env.EXPO_PUBLIC_WEB_URL;
+  if (envUrl) return envUrl;
+
+  return __DEV__ ? getDevBaseUrl() : "https://aikinote.com";
+};
+
+const getDomain = (url: string): string => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "aikinote.com";
+  }
+};
+
+const webBaseUrl = getBaseUrl();
+
 export const config = {
-  webBaseUrl: __DEV__ ? getDevBaseUrl() : "https://aikinote.com",
-  webDomain: __DEV__ ? "localhost" : "aikinote.com",
+  webBaseUrl,
+  webDomain: getDomain(webBaseUrl),
   splashTimeoutMs: 10_000,
 } as const;
