@@ -7,7 +7,6 @@ import { NetworkError } from "@/components/error/network-error";
 import { NativeHeader } from "@/components/header/native-header";
 import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikiWebView } from "@/components/webview/aiki-webview";
-import { config } from "@/constants/config";
 import { useWebView } from "@/hooks/use-webview";
 import { getActiveTab } from "@/lib/navigation/tab-utils";
 
@@ -52,18 +51,21 @@ export default function HomeScreen() {
 
   const handleTabPress = useCallback(
     (path: string) => {
-      webView.navigateTo(`${config.webBaseUrl}${path}`);
+      webView.navigateInWebView(path);
     },
-    [webView.navigateTo],
+    [webView.navigateInWebView],
   );
 
   const handleLogoPress = useCallback(() => {
-    webView.navigateTo(`${config.webBaseUrl}/personal/pages`);
-  }, [webView.navigateTo]);
+    webView.navigateInWebView("/personal/pages");
+  }, [webView.navigateInWebView]);
 
+  // Web 版の非表示ヘッダー内のメニューボタンをクリックして NavigationDrawer を開く
   const handleMenuPress = useCallback(() => {
-    webView.navigateTo(`${config.webBaseUrl}/settings`);
-  }, [webView.navigateTo]);
+    webView.executeScript(
+      `document.querySelector('button[aria-label="メニューを開く"]')?.click();`,
+    );
+  }, [webView.executeScript]);
 
   if (webView.hasError || isOffline) {
     return (

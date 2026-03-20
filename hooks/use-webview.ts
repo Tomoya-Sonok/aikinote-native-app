@@ -46,6 +46,7 @@ export function useWebView(initialUrl: string) {
     return false;
   }, [state.canGoBack]);
 
+  // source.uri を変更して全ページリロード（ディープリンク等で使用）
   const navigateTo = useCallback((url: string) => {
     setState((prev) => ({
       ...prev,
@@ -53,6 +54,19 @@ export function useWebView(initialUrl: string) {
       hasError: false,
       currentUrl: url,
     }));
+  }, []);
+
+  // WebView 内でパス遷移（injectJavaScript でクライアントサイドナビゲーション）
+  const navigateInWebView = useCallback((path: string) => {
+    ref.current?.injectJavaScript(`
+      window.location.href = '${path}';
+      true;
+    `);
+  }, []);
+
+  // WebView 内で任意の JS を実行
+  const executeScript = useCallback((script: string) => {
+    ref.current?.injectJavaScript(`${script}\ntrue;`);
   }, []);
 
   return {
@@ -65,5 +79,7 @@ export function useWebView(initialUrl: string) {
     reload,
     goBack,
     navigateTo,
+    navigateInWebView,
+    executeScript,
   };
 }
