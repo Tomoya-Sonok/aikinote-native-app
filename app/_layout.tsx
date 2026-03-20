@@ -4,16 +4,22 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { config } from "@/constants/config";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+
+// アプリ起動時にスプラッシュスクリーンを維持
+SplashScreen.preventAutoHideAsync();
 
 type AppContextValue = {
   initialUrl: string;
@@ -36,14 +42,24 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [initialUrl] = useState(config.webBaseUrl);
+  const splashHidden = useRef(false);
 
-  const onWebViewReady = useCallback(() => {
-    // Step 4 でスプラッシュスクリーン制御を追加
+  const hideSplash = useCallback(() => {
+    if (!splashHidden.current) {
+      splashHidden.current = true;
+      SplashScreen.hideAsync();
+    }
   }, []);
 
+  // タイムアウト: WebView ロードが完了しなくてもスプラッシュを非表示にする
+  useEffect(() => {
+    const timeout = setTimeout(hideSplash, config.splashTimeoutMs);
+    return () => clearTimeout(timeout);
+  }, [hideSplash]);
+
   const contextValue = useMemo(
-    () => ({ initialUrl, onWebViewReady }),
-    [initialUrl, onWebViewReady],
+    () => ({ initialUrl, onWebViewReady: hideSplash }),
+    [initialUrl, hideSplash],
   );
 
   return (
