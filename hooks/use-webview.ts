@@ -5,7 +5,8 @@ type WebViewState = {
   isLoading: boolean;
   hasError: boolean;
   canGoBack: boolean;
-  currentUrl: string;
+  sourceUrl: string;
+  displayUrl: string;
 };
 
 export function useWebView(initialUrl: string) {
@@ -14,7 +15,8 @@ export function useWebView(initialUrl: string) {
     isLoading: true,
     hasError: false,
     canGoBack: false,
-    currentUrl: initialUrl,
+    sourceUrl: initialUrl,
+    displayUrl: initialUrl,
   });
 
   const setLoaded = useCallback(() => {
@@ -29,8 +31,9 @@ export function useWebView(initialUrl: string) {
     setState((prev) => ({ ...prev, canGoBack }));
   }, []);
 
-  const setCurrentUrl = useCallback((url: string) => {
-    setState((prev) => ({ ...prev, currentUrl: url }));
+  // WebView 内ナビゲーションの結果を追跡（source.uri は変更しない）
+  const setDisplayUrl = useCallback((url: string) => {
+    setState((prev) => ({ ...prev, displayUrl: url }));
   }, []);
 
   const reload = useCallback(() => {
@@ -52,11 +55,12 @@ export function useWebView(initialUrl: string) {
       ...prev,
       isLoading: true,
       hasError: false,
-      currentUrl: url,
+      sourceUrl: url,
+      displayUrl: url,
     }));
   }, []);
 
-  // WebView 内でパス遷移（injectJavaScript でクライアントサイドナビゲーション）
+  // WebView 内でパス遷移（source.uri は変更しない）
   const navigateInWebView = useCallback((path: string) => {
     ref.current?.injectJavaScript(`
       window.location.href = '${path}';
@@ -75,7 +79,7 @@ export function useWebView(initialUrl: string) {
     setLoaded,
     setError,
     setCanGoBack,
-    setCurrentUrl,
+    setDisplayUrl,
     reload,
     goBack,
     navigateTo,

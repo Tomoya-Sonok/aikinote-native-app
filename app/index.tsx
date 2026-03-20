@@ -16,7 +16,7 @@ export default function HomeScreen() {
   const webView = useWebView(initialUrl);
   const netInfo = useNetInfo();
   const isOffline = netInfo.isConnected === false;
-  const activeTab = getActiveTab(webView.currentUrl);
+  const activeTab = getActiveTab(webView.displayUrl);
 
   // Android: 戻るボタンで WebView 内の履歴を戻る
   useEffect(() => {
@@ -44,9 +44,9 @@ export default function HomeScreen() {
   const handleNavigationStateChange = useCallback(
     (canGoBack: boolean, url: string) => {
       webView.setCanGoBack(canGoBack);
-      webView.setCurrentUrl(url);
+      webView.setDisplayUrl(url);
     },
-    [webView.setCanGoBack, webView.setCurrentUrl],
+    [webView.setCanGoBack, webView.setDisplayUrl],
   );
 
   const handleTabPress = useCallback(
@@ -83,7 +83,7 @@ export default function HomeScreen() {
       />
       <View style={styles.webviewArea}>
         <AikiWebView
-          url={webView.currentUrl}
+          url={webView.sourceUrl}
           webViewRef={webView.ref}
           onLoadEnd={handleLoadEnd}
           onError={webView.setError}

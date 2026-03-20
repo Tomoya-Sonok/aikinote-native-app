@@ -9,18 +9,53 @@ import type {
 
 import { config } from "@/constants/config";
 
-// DOM 構築前に注入: ネイティブアプリフラグ設定 + Web 版ヘッダー/フッター非表示
+const HIDE_WEB_CHROME_CSS = `
+/* ヘッダー: visibility: hidden で縮小（NavigationDrawer は子要素なので display: none にすると一緒に消える） */
+[data-testid="default-header"], header[class*="header"] {
+  visibility: hidden !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  overflow: visible !important;
+}
+/* NavigationDrawer の overlay と drawer パネルは visible に復活 */
+[class*="overlay"], [class*="drawer"] {
+  visibility: visible !important;
+}
+/* タブナビゲーション: Drawer を含まないので display: none で OK */
+[data-testid="tab-navigation"], div[class*="tabContainer"] {
+  display: none !important;
+}
+main { padding-bottom: 0 !important; }
+`.trim();
+
+// DOM 構築前に注入: ネイティブアプリフラグ設定 + CSS 非表示（早期実行）
 const INJECTED_JS_BEFORE_CONTENT_LOADED = `
 (function() {
   window.__AIKINOTE_NATIVE_APP__ = true;
+  try {
+    var style = document.createElement('style');
+    style.id = 'native-app-overrides';
+    style.textContent = ${JSON.stringify(HIDE_WEB_CHROME_CSS)};
+    var target = document.head || document.documentElement;
+    if (target) target.appendChild(style);
+  } catch(e) {}
+})();
+true;
+`;
 
-  var style = document.createElement('style');
-  style.textContent = [
-    '[data-testid="default-header"], header[class*="header"] { display: none !important; }',
-    '[data-testid="tab-navigation"], div[class*="tabContainer"] { display: none !important; }',
-    'main { padding-bottom: 0 !important; }'
-  ].join('\\n');
-  document.head.appendChild(style);
+// ページ読み込み後に注入: CSS 非表示の確実なフォールバック
+const INJECTED_JS_AFTER_LOAD = `
+(function() {
+  window.__AIKINOTE_NATIVE_APP__ = true;
+  if (!document.getElementById('native-app-overrides')) {
+    var style = document.createElement('style');
+    style.id = 'native-app-overrides';
+    style.textContent = ${JSON.stringify(HIDE_WEB_CHROME_CSS)};
+    (document.head || document.documentElement).appendChild(style);
+  }
 })();
 true;
 `;
@@ -93,8 +128,9 @@ export function AikiWebView({
       javaScriptEnabled={true}
       allowsBackForwardNavigationGestures={Platform.OS === "ios"}
       startInLoadingState={false}
-      // CSS インジェクション
+      // CSS インジェクション（二重注入で確実性を確保）
       injectedJavaScriptBeforeContentLoaded={INJECTED_JS_BEFORE_CONTENT_LOADED}
+      injectedJavaScript={INJECTED_JS_AFTER_LOAD}
       // コールバック
       onLoadEnd={onLoadEnd}
       onError={handleError}
