@@ -4,6 +4,7 @@ import { BackHandler, Platform, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppContext } from "@/app/_layout";
 import { NetworkError } from "@/components/error/network-error";
+import { NativeHeader } from "@/components/header/native-header";
 import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikiWebView } from "@/components/webview/aiki-webview";
 import { config } from "@/constants/config";
@@ -56,6 +57,14 @@ export default function HomeScreen() {
     [webView.navigateTo],
   );
 
+  const handleLogoPress = useCallback(() => {
+    webView.navigateTo(`${config.webBaseUrl}/personal/pages`);
+  }, [webView.navigateTo]);
+
+  const handleMenuPress = useCallback(() => {
+    webView.navigateTo(`${config.webBaseUrl}/settings`);
+  }, [webView.navigateTo]);
+
   if (webView.hasError || isOffline) {
     return (
       <SafeAreaView style={styles.container}>
@@ -66,7 +75,11 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.webviewArea} edges={["top"]}>
+      <NativeHeader
+        onLogoPress={handleLogoPress}
+        onMenuPress={handleMenuPress}
+      />
+      <View style={styles.webviewArea}>
         <AikiWebView
           url={webView.currentUrl}
           webViewRef={webView.ref}
@@ -74,7 +87,7 @@ export default function HomeScreen() {
           onError={webView.setError}
           onNavigationStateChange={handleNavigationStateChange}
         />
-      </SafeAreaView>
+      </View>
       <NativeTabBar activeTab={activeTab} onTabPress={handleTabPress} />
     </View>
   );
