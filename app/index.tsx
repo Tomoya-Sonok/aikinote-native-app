@@ -1,6 +1,6 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useCallback, useEffect } from "react";
-import { StyleSheet } from "react-native";
+import { BackHandler, Platform, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppContext } from "@/app/_layout";
 import { NetworkError } from "@/components/error/network-error";
@@ -13,6 +13,16 @@ export default function HomeScreen() {
   const webView = useWebView(initialUrl);
   const netInfo = useNetInfo();
   const isOffline = netInfo.isConnected === false;
+
+  // Android: 戻るボタンで WebView 内の履歴を戻る
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const handler = BackHandler.addEventListener("hardwareBackPress", () => {
+      return webView.goBack();
+    });
+    return () => handler.remove();
+  }, [webView.goBack]);
 
   // ウォームスタート時のディープリンクを処理
   useEffect(() => {
