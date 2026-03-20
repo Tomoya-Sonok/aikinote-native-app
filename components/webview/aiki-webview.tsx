@@ -110,15 +110,20 @@ function isInternalUrl(url: string): boolean {
     const parsed = new URL(url);
     const hostname = parsed.hostname;
 
-    // 開発環境: localhost / 10.0.2.2
+    // config.webDomain（EXPO_PUBLIC_WEB_URL で上書き可能）と一致するか
+    if (
+      hostname === config.webDomain ||
+      hostname.endsWith(`.${config.webDomain}`)
+    ) {
+      return true;
+    }
+
+    // 開発環境: localhost / 10.0.2.2 も許可
     if (__DEV__) {
       return hostname === "localhost" || hostname === "10.0.2.2";
     }
 
-    // 本番環境: aikinote.com とそのサブドメイン
-    return (
-      hostname === config.webDomain || hostname.endsWith(`.${config.webDomain}`)
-    );
+    return false;
   } catch {
     // about:blank, data: URL 等は WebView 内で許可
     return true;
