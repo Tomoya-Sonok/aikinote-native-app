@@ -1,5 +1,5 @@
 import { useNetInfo } from "@react-native-community/netinfo";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppContext } from "@/app/_layout";
@@ -8,10 +8,19 @@ import { AikiWebView } from "@/components/webview/aiki-webview";
 import { useWebView } from "@/hooks/use-webview";
 
 export default function HomeScreen() {
-  const { initialUrl, onWebViewReady } = useAppContext();
+  const { initialUrl, onWebViewReady, pendingDeepLink, clearPendingDeepLink } =
+    useAppContext();
   const webView = useWebView(initialUrl);
   const netInfo = useNetInfo();
   const isOffline = netInfo.isConnected === false;
+
+  // ウォームスタート時のディープリンクを処理
+  useEffect(() => {
+    if (pendingDeepLink) {
+      webView.navigateTo(pendingDeepLink);
+      clearPendingDeepLink();
+    }
+  }, [pendingDeepLink, webView.navigateTo, clearPendingDeepLink]);
 
   const handleLoadEnd = useCallback(() => {
     webView.setLoaded();
