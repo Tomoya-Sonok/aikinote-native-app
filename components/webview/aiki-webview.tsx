@@ -16,8 +16,8 @@ const INJECTED_JS_BEFORE_CONTENT_LOADED = `
 
   var style = document.createElement('style');
   style.textContent = [
-    '[data-testid="default-header"] { display: none !important; }',
-    '[data-testid="tab-navigation"] { display: none !important; }',
+    '[data-testid="default-header"], header[class*="header"] { display: none !important; }',
+    '[data-testid="tab-navigation"], div[class*="tabContainer"] { display: none !important; }',
     'main { padding-bottom: 0 !important; }'
   ].join('\\n');
   document.head.appendChild(style);
