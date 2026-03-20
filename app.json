@@ -45,6 +45,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7a166659-243a-4fad-b661-beb68e29a1a6"
+      }
+    },
+    "owner": "tomoya-sonok"
   }
 }
