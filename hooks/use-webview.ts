@@ -1,0 +1,69 @@
+import { useCallback, useRef, useState } from "react";
+import type WebView from "react-native-webview";
+
+type WebViewState = {
+  isLoading: boolean;
+  hasError: boolean;
+  canGoBack: boolean;
+  currentUrl: string;
+};
+
+export function useWebView(initialUrl: string) {
+  const ref = useRef<WebView>(null);
+  const [state, setState] = useState<WebViewState>({
+    isLoading: true,
+    hasError: false,
+    canGoBack: false,
+    currentUrl: initialUrl,
+  });
+
+  const setLoaded = useCallback(() => {
+    setState((prev) => ({ ...prev, isLoading: false, hasError: false }));
+  }, []);
+
+  const setError = useCallback(() => {
+    setState((prev) => ({ ...prev, isLoading: false, hasError: true }));
+  }, []);
+
+  const setCanGoBack = useCallback((canGoBack: boolean) => {
+    setState((prev) => ({ ...prev, canGoBack }));
+  }, []);
+
+  const setCurrentUrl = useCallback((url: string) => {
+    setState((prev) => ({ ...prev, currentUrl: url }));
+  }, []);
+
+  const reload = useCallback(() => {
+    setState((prev) => ({ ...prev, isLoading: true, hasError: false }));
+    ref.current?.reload();
+  }, []);
+
+  const goBack = useCallback(() => {
+    if (state.canGoBack) {
+      ref.current?.goBack();
+      return true;
+    }
+    return false;
+  }, [state.canGoBack]);
+
+  const navigateTo = useCallback((url: string) => {
+    setState((prev) => ({
+      ...prev,
+      isLoading: true,
+      hasError: false,
+      currentUrl: url,
+    }));
+  }, []);
+
+  return {
+    ref,
+    ...state,
+    setLoaded,
+    setError,
+    setCanGoBack,
+    setCurrentUrl,
+    reload,
+    goBack,
+    navigateTo,
+  };
+}

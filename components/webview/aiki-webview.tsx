@@ -1,0 +1,114 @@
+import * as WebBrowser from "expo-web-browser";
+import { useCallback } from "react";
+import { Platform, StyleSheet } from "react-native";
+import { WebView, type WebViewNavigation } from "react-native-webview";
+import type {
+  WebViewErrorEvent,
+  WebViewHttpErrorEvent,
+} from "react-native-webview/lib/WebViewTypes";
+
+import { config } from "@/constants/config";
+
+type AikiWebViewProps = {
+  url: string;
+  webViewRef: React.RefObject<WebView | null>;
+  onLoadEnd: () => void;
+  onError: () => void;
+  onNavigationStateChange: (canGoBack: boolean, url: string) => void;
+};
+
+export function AikiWebView({
+  url,
+  webViewRef,
+  onLoadEnd,
+  onError,
+  onNavigationStateChange,
+}: AikiWebViewProps) {
+  const handleNavigationStateChange = useCallback(
+    (navState: WebViewNavigation) => {
+      onNavigationStateChange(navState.canGoBack, navState.url);
+    },
+    [onNavigationStateChange],
+  );
+
+  const handleShouldStartLoad = useCallback(
+    (event: { url: string }): boolean => {
+      const { url: requestUrl } = event;
+
+      // 同一ドメインへのリクエストは WebView 内で処理
+      if (isInternalUrl(requestUrl)) {
+        return true;
+      }
+
+      // 外部 URL は外部ブラウザで開く
+      WebBrowser.openBrowserAsync(requestUrl);
+      return false;
+    },
+    [],
+  );
+
+  const handleError = useCallback(
+    (_event: WebViewErrorEvent) => {
+      onError();
+    },
+    [onError],
+  );
+
+  const handleHttpError = useCallback(
+    (event: WebViewHttpErrorEvent) => {
+      const { statusCode } = event.nativeEvent;
+      if (statusCode >= 500) {
+        onError();
+      }
+    },
+    [onError],
+  );
+
+  return (
+    <WebView
+      ref={webViewRef}
+      source={{ uri: url }}
+      style={styles.webview}
+      // Cookie 設定
+      sharedCookiesEnabled={true}
+      thirdPartyCookiesEnabled={true}
+      domStorageEnabled={true}
+      // ナビゲーション
+      javaScriptEnabled={true}
+      allowsBackForwardNavigationGestures={Platform.OS === "ios"}
+      startInLoadingState={false}
+      // コールバック
+      onLoadEnd={onLoadEnd}
+      onError={handleError}
+      onHttpError={handleHttpError}
+      onNavigationStateChange={handleNavigationStateChange}
+      onShouldStartLoadWithRequest={handleShouldStartLoad}
+    />
+  );
+}
+
+function isInternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname;
+
+    // 開発環境: localhost / 10.0.2.2
+    if (__DEV__) {
+      return hostname === "localhost" || hostname === "10.0.2.2";
+    }
+
+    // 本番環境: aikinote.com とそのサブドメイン
+    return (
+      hostname === config.webDomain || hostname.endsWith(`.${config.webDomain}`)
+    );
+  } catch {
+    // about:blank, data: URL 等は WebView 内で許可
+    return true;
+  }
+}
+
+const styles = StyleSheet.create({
+  webview: {
+    flex: 1,
+  },
+});
