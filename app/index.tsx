@@ -1,11 +1,14 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useCallback, useEffect } from "react";
-import { BackHandler, Platform, StyleSheet } from "react-native";
+import { BackHandler, Platform, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppContext } from "@/app/_layout";
 import { NetworkError } from "@/components/error/network-error";
+import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikiWebView } from "@/components/webview/aiki-webview";
+import { config } from "@/constants/config";
 import { useWebView } from "@/hooks/use-webview";
+import { getActiveTab } from "@/lib/navigation/tab-utils";
 
 export default function HomeScreen() {
   const { initialUrl, onWebViewReady, pendingDeepLink, clearPendingDeepLink } =
@@ -13,6 +16,7 @@ export default function HomeScreen() {
   const webView = useWebView(initialUrl);
   const netInfo = useNetInfo();
   const isOffline = netInfo.isConnected === false;
+  const activeTab = getActiveTab(webView.currentUrl);
 
   // Android: 戻るボタンで WebView 内の履歴を戻る
   useEffect(() => {
@@ -45,6 +49,13 @@ export default function HomeScreen() {
     [webView.setCanGoBack, webView.setCurrentUrl],
   );
 
+  const handleTabPress = useCallback(
+    (path: string) => {
+      webView.navigateTo(`${config.webBaseUrl}${path}`);
+    },
+    [webView.navigateTo],
+  );
+
   if (webView.hasError || isOffline) {
     return (
       <SafeAreaView style={styles.container}>
@@ -54,20 +65,26 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      <AikiWebView
-        url={webView.currentUrl}
-        webViewRef={webView.ref}
-        onLoadEnd={handleLoadEnd}
-        onError={webView.setError}
-        onNavigationStateChange={handleNavigationStateChange}
-      />
-    </SafeAreaView>
+    <View style={styles.container}>
+      <SafeAreaView style={styles.webviewArea} edges={["top"]}>
+        <AikiWebView
+          url={webView.currentUrl}
+          webViewRef={webView.ref}
+          onLoadEnd={handleLoadEnd}
+          onError={webView.setError}
+          onNavigationStateChange={handleNavigationStateChange}
+        />
+      </SafeAreaView>
+      <NativeTabBar activeTab={activeTab} onTabPress={handleTabPress} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  webviewArea: {
     flex: 1,
   },
 });
