@@ -9,6 +9,22 @@ import type {
 
 import { config } from "@/constants/config";
 
+// DOM 構築前に注入: ネイティブアプリフラグ設定 + Web 版ヘッダー/フッター非表示
+const INJECTED_JS_BEFORE_CONTENT_LOADED = `
+(function() {
+  window.__AIKINOTE_NATIVE_APP__ = true;
+
+  var style = document.createElement('style');
+  style.textContent = [
+    '[data-testid="default-header"] { display: none !important; }',
+    '[data-testid="tab-navigation"] { display: none !important; }',
+    'main { padding-bottom: 0 !important; }'
+  ].join('\\n');
+  document.head.appendChild(style);
+})();
+true;
+`;
+
 type AikiWebViewProps = {
   url: string;
   webViewRef: React.RefObject<WebView | null>;
@@ -77,6 +93,8 @@ export function AikiWebView({
       javaScriptEnabled={true}
       allowsBackForwardNavigationGestures={Platform.OS === "ios"}
       startInLoadingState={false}
+      // CSS インジェクション
+      injectedJavaScriptBeforeContentLoaded={INJECTED_JS_BEFORE_CONTENT_LOADED}
       // コールバック
       onLoadEnd={onLoadEnd}
       onError={handleError}
