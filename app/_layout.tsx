@@ -29,8 +29,8 @@ type AppContextValue = {
   onWebViewReady: () => void;
   pendingDeepLink: string | null;
   clearPendingDeepLink: () => void;
-  /** AsyncStorage から読み込んだ検索履歴 JSON（WebView の localStorage に復元用） */
   searchHistoryJson: string;
+  updateSearchHistoryJson: (json: string) => void;
 };
 
 const AppContext = createContext<AppContextValue>({
@@ -39,6 +39,7 @@ const AppContext = createContext<AppContextValue>({
   pendingDeepLink: null,
   clearPendingDeepLink: () => {},
   searchHistoryJson: "[]",
+  updateSearchHistoryJson: () => {},
 });
 
 export function useAppContext() {
@@ -95,6 +96,10 @@ export default function RootLayout() {
     setPendingDeepLink(null);
   }, []);
 
+  const updateSearchHistoryJson = useCallback((json: string) => {
+    setSearchHistoryJson(json);
+  }, []);
+
   const contextValue = useMemo(
     () => ({
       initialUrl,
@@ -102,6 +107,7 @@ export default function RootLayout() {
       pendingDeepLink,
       clearPendingDeepLink,
       searchHistoryJson,
+      updateSearchHistoryJson,
     }),
     [
       initialUrl,
@@ -109,6 +115,7 @@ export default function RootLayout() {
       pendingDeepLink,
       clearPendingDeepLink,
       searchHistoryJson,
+      updateSearchHistoryJson,
     ],
   );
 

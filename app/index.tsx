@@ -23,6 +23,7 @@ export default function HomeScreen() {
     pendingDeepLink,
     clearPendingDeepLink,
     searchHistoryJson,
+    updateSearchHistoryJson,
   } = useAppContext();
   const webView = useWebView(initialUrl);
   const netInfo = useNetInfo();
@@ -86,19 +87,24 @@ export default function HomeScreen() {
   }, [webView.executeScript]);
 
   // WebView からのメッセージ受信（検索履歴の同期等）
-  const handleMessage = useCallback((event: WebViewMessageEvent) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (
-        data.type === "SEARCH_HISTORY_UPDATED" &&
-        Array.isArray(data.payload)
-      ) {
-        saveSearchHistory(data.payload);
+  const handleMessage = useCallback(
+    (event: WebViewMessageEvent) => {
+      try {
+        const data = JSON.parse(event.nativeEvent.data);
+        if (
+          data.type === "SEARCH_HISTORY_UPDATED" &&
+          Array.isArray(data.payload)
+        ) {
+          const json = JSON.stringify(data.payload);
+          updateSearchHistoryJson(json);
+          saveSearchHistory(data.payload);
+        }
+      } catch {
+        // パースエラーは無視
       }
-    } catch {
-      // パースエラーは無視
-    }
-  }, []);
+    },
+    [updateSearchHistoryJson],
+  );
 
   // SocialFeedHeader: プロフィール画像タップ
   const handleProfilePress = useCallback(() => {
