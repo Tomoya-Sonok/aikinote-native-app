@@ -32,20 +32,48 @@ export const TABS: TabDefinition[] = [
   },
 ];
 
+function normalizePathname(url: string): string | null {
+  try {
+    const { pathname } = new URL(url);
+    return pathname.replace(/^\/[a-z]{2}(?=\/)/, "");
+  } catch {
+    return null;
+  }
+}
+
 /**
  * URL からアクティブなタブを判定する。
  */
 export function getActiveTab(url: string): TabId | null {
-  try {
-    const { pathname } = new URL(url);
-    // locale prefix を除去（/ja/personal/pages → /personal/pages）
-    const normalized = pathname.replace(/^\/[a-z]{2}(?=\/)/, "");
+  const normalized = normalizePathname(url);
+  if (!normalized) return null;
 
-    if (normalized.startsWith("/personal")) return "personal";
-    if (normalized.startsWith("/social")) return "social";
-    if (normalized.startsWith("/mypage")) return "mypage";
-    return null;
-  } catch {
-    return null;
+  if (normalized.startsWith("/personal")) return "personal";
+  if (normalized.startsWith("/social")) return "social";
+  if (normalized.startsWith("/mypage")) return "mypage";
+  return null;
+}
+
+export type HeaderType = "default" | "social-feed" | "web";
+
+/**
+ * URL からヘッダータイプを判定する。
+ * - "default": ネイティブ DefaultHeader（ロゴ + メニュー）
+ * - "social-feed": ネイティブ SocialFeedHeader（プロフィール + タイトル + 検索）
+ * - "web": Web 版のヘッダーをそのまま表示
+ */
+export function getHeaderType(url: string): HeaderType {
+  const normalized = normalizePathname(url);
+  if (!normalized) return "web";
+
+  if (normalized.startsWith("/personal") || normalized.startsWith("/mypage")) {
+    return "default";
   }
+
+  // /social/posts 完全一致（trailing slash, query 許容）
+  if (/^\/social\/posts\/?(\?.*)?$/.test(normalized)) {
+    return "social-feed";
+  }
+
+  return "web";
 }

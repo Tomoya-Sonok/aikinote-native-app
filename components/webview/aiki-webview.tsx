@@ -1,5 +1,5 @@
 import * as WebBrowser from "expo-web-browser";
-import { useCallback } from "react";
+import React, { useCallback } from "react";
 import { Platform, StyleSheet } from "react-native";
 import { WebView, type WebViewNavigation } from "react-native-webview";
 import type {
@@ -10,8 +10,8 @@ import type {
 import { config } from "@/constants/config";
 
 const HIDE_WEB_CHROME_CSS = `
-/* ヘッダー: visibility: hidden で縮小（NavigationDrawer は子要素なので display: none にすると一緒に消える） */
-[data-testid="default-header"], header[class*="header"] {
+/* DefaultHeader: visibility: hidden で縮小（NavigationDrawer は子要素なので display: none 不可） */
+[data-testid="default-header"] {
   visibility: hidden !important;
   height: 0 !important;
   min-height: 0 !important;
@@ -24,7 +24,11 @@ const HIDE_WEB_CHROME_CSS = `
 [class*="overlay"], [class*="drawer"] {
   visibility: visible !important;
 }
-/* タブナビゲーション: Drawer を含まないので display: none で OK */
+/* ネイティブヘッダー表示時に JS から付与されるクラス */
+.native-header-hidden {
+  display: none !important;
+}
+/* タブナビゲーション: 常に非表示 */
 [data-testid="tab-navigation"], div[class*="tabContainer"] {
   display: none !important;
 }
@@ -60,9 +64,12 @@ const INJECTED_JS_AFTER_LOAD = `
 true;
 `;
 
+type HeaderType = "default" | "social-feed" | "web";
+
 type AikiWebViewProps = {
   url: string;
   webViewRef: React.RefObject<WebView | null>;
+  headerType: HeaderType;
   onLoadEnd: () => void;
   onError: () => void;
   onNavigationStateChange: (canGoBack: boolean, url: string) => void;
@@ -71,6 +78,7 @@ type AikiWebViewProps = {
 export function AikiWebView({
   url,
   webViewRef,
+  headerType,
   onLoadEnd,
   onError,
   onNavigationStateChange,
@@ -81,6 +89,33 @@ export function AikiWebView({
     },
     [onNavigationStateChange],
   );
+
+  // ネイティブヘッダー表示時に対応する Web 版ヘッダーを非表示にする
+  const prevHeaderTypeRef = React.useRef(headerType);
+  React.useEffect(() => {
+    if (headerType === prevHeaderTypeRef.current) return;
+    prevHeaderTypeRef.current = headerType;
+
+    if (headerType === "social-feed") {
+      // SocialFeedHeader をネイティブで表示 → Web 版の SocialHeader を非表示に
+      webViewRef.current?.injectJavaScript(`
+        document.querySelectorAll('header').forEach(function(h) {
+          if (!h.hasAttribute('data-testid') || h.getAttribute('data-testid') !== 'default-header') {
+            h.classList.add('native-header-hidden');
+          }
+        });
+        true;
+      `);
+    } else {
+      // それ以外 → Web 版ヘッダーの非表示を解除
+      webViewRef.current?.injectJavaScript(`
+        document.querySelectorAll('.native-header-hidden').forEach(function(h) {
+          h.classList.remove('native-header-hidden');
+        });
+        true;
+      `);
+    }
+  }, [headerType, webViewRef]);
 
   const handleShouldStartLoad = useCallback(
     (event: { url: string }): boolean => {

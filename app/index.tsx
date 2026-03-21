@@ -5,10 +5,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppContext } from "@/app/_layout";
 import { NetworkError } from "@/components/error/network-error";
 import { NativeHeader } from "@/components/header/native-header";
+import { SocialFeedNativeHeader } from "@/components/header/social-feed-header";
 import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikiWebView } from "@/components/webview/aiki-webview";
 import { useWebView } from "@/hooks/use-webview";
-import { getActiveTab } from "@/lib/navigation/tab-utils";
+import { getActiveTab, getHeaderType } from "@/lib/navigation/tab-utils";
 
 export default function HomeScreen() {
   const { initialUrl, onWebViewReady, pendingDeepLink, clearPendingDeepLink } =
@@ -17,6 +18,7 @@ export default function HomeScreen() {
   const netInfo = useNetInfo();
   const isOffline = netInfo.isConnected === false;
   const activeTab = getActiveTab(webView.displayUrl);
+  const headerType = getHeaderType(webView.displayUrl);
 
   // Android: 戻るボタンで WebView 内の履歴を戻る
   useEffect(() => {
@@ -60,12 +62,27 @@ export default function HomeScreen() {
     webView.navigateInWebView("/personal/pages");
   }, [webView.navigateInWebView]);
 
-  // Web 版の非表示ヘッダー内のメニューボタンをクリックして NavigationDrawer を開く
+  // メニューボタン: NavigationDrawer の開閉をトグル
   const handleMenuPress = useCallback(() => {
-    webView.executeScript(
-      `document.querySelector('button[aria-label="メニューを開く"]')?.click();`,
-    );
+    webView.executeScript(`
+      var overlay = document.querySelector('[class*="overlay"]');
+      if (overlay) {
+        overlay.click();
+      } else {
+        document.querySelector('button[aria-label="メニューを開く"]')?.click();
+      }
+    `);
   }, [webView.executeScript]);
+
+  // SocialFeedHeader: プロフィール画像タップ
+  const handleProfilePress = useCallback(() => {
+    webView.navigateInWebView("/mypage");
+  }, [webView.navigateInWebView]);
+
+  // SocialFeedHeader: 検索アイコンタップ
+  const handleSearchPress = useCallback(() => {
+    webView.navigateInWebView("/social/posts/search");
+  }, [webView.navigateInWebView]);
 
   if (webView.hasError || isOffline) {
     return (
@@ -77,14 +94,23 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <NativeHeader
-        onLogoPress={handleLogoPress}
-        onMenuPress={handleMenuPress}
-      />
+      {headerType === "default" && (
+        <NativeHeader
+          onLogoPress={handleLogoPress}
+          onMenuPress={handleMenuPress}
+        />
+      )}
+      {headerType === "social-feed" && (
+        <SocialFeedNativeHeader
+          onProfilePress={handleProfilePress}
+          onSearchPress={handleSearchPress}
+        />
+      )}
       <View style={styles.webviewArea}>
         <AikiWebView
           url={webView.sourceUrl}
           webViewRef={webView.ref}
+          headerType={headerType}
           onLoadEnd={handleLoadEnd}
           onError={webView.setError}
           onNavigationStateChange={handleNavigationStateChange}
