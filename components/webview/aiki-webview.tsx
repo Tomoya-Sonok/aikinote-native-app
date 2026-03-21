@@ -109,11 +109,16 @@ const INJECTED_JS_AFTER_LOAD = `
     try {
       var avatarImg = document.querySelector('button[aria-label*="プロフィール"] img');
       var avatarUrl = avatarImg ? avatarImg.getAttribute('src') : null;
-      var profileLink = document.querySelector('a[href*="/mypage"] [class*="profileCardName"], [class*="profileCardName"]');
-      var username = profileLink ? profileLink.textContent : '';
+      // SocialFeedHeader のプロフィールリンクから userId を抽出
+      var profileAnchor = document.querySelector('a[href*="/social/profile/"]');
+      var userId = null;
+      if (profileAnchor) {
+        var match = profileAnchor.getAttribute('href').match(//social/profile/([^/?]+)/);
+        if (match) userId = match[1];
+      }
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'USER_INFO',
-        payload: { profileImageUrl: avatarUrl, username: username }
+        payload: { profileImageUrl: avatarUrl, userId: userId }
       }));
     } catch(e) {}
   }

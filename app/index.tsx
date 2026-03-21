@@ -32,6 +32,7 @@ export default function HomeScreen() {
   const activeTab = getActiveTab(webView.displayUrl);
   const headerType = getHeaderType(webView.displayUrl);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   // Android: 戻るボタンで WebView 内の履歴を戻る
   useEffect(() => {
@@ -108,6 +109,7 @@ export default function HomeScreen() {
           saveSearchHistory(data.payload);
         } else if (data.type === "USER_INFO" && data.payload) {
           setProfileImageUrl(data.payload.profileImageUrl ?? null);
+          setUserId(data.payload.userId ?? null);
         }
       } catch {
         // パースエラーは無視
@@ -116,10 +118,14 @@ export default function HomeScreen() {
     [updateSearchHistoryJson],
   );
 
-  // SocialFeedHeader: プロフィール画像タップ
+  // SocialFeedHeader: プロフィール画像タップ → /social/profile/[userId]
   const handleProfilePress = useCallback(() => {
-    webView.navigateInWebView("/mypage");
-  }, [webView.navigateInWebView]);
+    if (userId) {
+      webView.navigateInWebView(`/social/profile/${userId}`);
+    } else {
+      webView.navigateInWebView("/mypage");
+    }
+  }, [webView.navigateInWebView, userId]);
 
   // SocialFeedHeader: 検索アイコンタップ
   const handleSearchPress = useCallback(() => {
