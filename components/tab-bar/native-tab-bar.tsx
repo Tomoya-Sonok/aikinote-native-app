@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
@@ -21,6 +20,7 @@ export function NativeTabBar({ activeTab, onTabPress }: NativeTabBarProps) {
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
       {TABS.map((tab) => {
         const isActive = tab.id === activeTab;
+        const IconComponent = tab.icon;
         return (
           <Pressable
             key={tab.id}
@@ -28,9 +28,9 @@ export function NativeTabBar({ activeTab, onTabPress }: NativeTabBarProps) {
             onPress={() => onTabPress(tab.path)}
           >
             <View style={[styles.tabInner, isActive && styles.tabInnerActive]}>
-              <Ionicons
-                name={isActive ? tab.activeIcon : tab.icon}
+              <IconComponent
                 size={24}
+                weight={isActive ? "fill" : "light"}
                 color={isActive ? ACTIVE_COLOR : INACTIVE_COLOR}
               />
               <ThemedText

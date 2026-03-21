@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { List } from "phosphor-react-native";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -21,7 +21,7 @@ export function NativeHeader({ onLogoPress, onMenuPress }: NativeHeaderProps) {
           />
         </Pressable>
         <Pressable onPress={onMenuPress} style={styles.menuButton}>
-          <Ionicons name="menu-outline" size={28} color="#2c2c2c" />
+          <List size={24} weight="light" color="#2c2c2c" />
         </Pressable>
       </View>
     </View>

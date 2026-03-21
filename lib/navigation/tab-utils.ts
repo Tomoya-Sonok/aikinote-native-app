@@ -1,5 +1,6 @@
-import type { Ionicons } from "@expo/vector-icons";
-import type { ComponentProps } from "react";
+import type { IconProps } from "phosphor-react-native";
+import { Chats, IdentificationCard, PencilSimple } from "phosphor-react-native";
+import type { FC } from "react";
 
 export type TabId = "personal" | "social" | "mypage";
 
@@ -7,8 +8,7 @@ type TabDefinition = {
   id: TabId;
   label: string;
   path: string;
-  icon: ComponentProps<typeof Ionicons>["name"];
-  activeIcon: ComponentProps<typeof Ionicons>["name"];
+  icon: FC<IconProps>;
 };
 
 export const TABS: TabDefinition[] = [
@@ -16,22 +16,19 @@ export const TABS: TabDefinition[] = [
     id: "personal",
     label: "ひとりで",
     path: "/personal/pages",
-    icon: "pencil-outline",
-    activeIcon: "pencil",
+    icon: PencilSimple,
   },
   {
     id: "social",
     label: "みんなで",
     path: "/social/posts",
-    icon: "chatbubbles-outline",
-    activeIcon: "chatbubbles",
+    icon: Chats,
   },
   {
     id: "mypage",
     label: "マイページ",
     path: "/mypage",
-    icon: "person-outline",
-    activeIcon: "person",
+    icon: IdentificationCard,
   },
 ];
 
