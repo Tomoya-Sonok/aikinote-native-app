@@ -35,7 +35,7 @@ function buildNativeAppCSS() {
   if (type === 'default') {
     // DefaultHeader ページ: visibility hidden で縮小（NavigationDrawer + プロフィールカードは残す）
     css.push('header { visibility: hidden !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: none !important; overflow: visible !important; }');
-    css.push('[class*="overlay"], [class*="drawer"], [class*="profileCard"] { visibility: visible !important; }');
+    css.push('[class*="overlay"], [class*="drawer"], [role="dialog"] { visibility: visible !important; }');
   } else if (type === 'social-feed') {
     // SocialFeedHeader ページ: header を完全非表示（NavigationDrawer なし）
     css.push('header { display: none !important; }');
