@@ -1,7 +1,10 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useCallback, useEffect } from "react";
 import { BackHandler, Platform, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useAppContext } from "@/app/_layout";
 import { NetworkError } from "@/components/error/network-error";
 import { NativeHeader } from "@/components/header/native-header";
@@ -17,6 +20,7 @@ export default function HomeScreen() {
   const webView = useWebView(initialUrl);
   const netInfo = useNetInfo();
   const isOffline = netInfo.isConnected === false;
+  const insets = useSafeAreaInsets();
   const activeTab = getActiveTab(webView.displayUrl);
   const headerType = getHeaderType(webView.displayUrl);
 
@@ -106,7 +110,12 @@ export default function HomeScreen() {
           onSearchPress={handleSearchPress}
         />
       )}
-      <View style={styles.webviewArea}>
+      <View
+        style={[
+          styles.webviewArea,
+          headerType === "web" && { paddingTop: insets.top },
+        ]}
+      >
         <AikiWebView
           url={webView.sourceUrl}
           webViewRef={webView.ref}
