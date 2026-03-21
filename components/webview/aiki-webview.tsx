@@ -1,5 +1,5 @@
 import * as WebBrowser from "expo-web-browser";
-import React, { useCallback } from "react";
+import { useCallback } from "react";
 import { Platform, StyleSheet } from "react-native";
 import { WebView, type WebViewNavigation } from "react-native-webview";
 import type {
@@ -9,40 +9,34 @@ import type {
 
 import { config } from "@/constants/config";
 
-const HIDE_WEB_CHROME_CSS = `
-/* DefaultHeader: visibility: hidden で縮小（NavigationDrawer は子要素なので display: none 不可） */
-[data-testid="default-header"] {
-  visibility: hidden !important;
-  height: 0 !important;
-  min-height: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border: none !important;
-  overflow: visible !important;
-}
-/* NavigationDrawer の overlay と drawer パネルは visible に復活 */
-[class*="overlay"], [class*="drawer"] {
-  visibility: visible !important;
-}
-/* ネイティブヘッダー表示時に JS から付与されるクラス */
-.native-header-hidden {
-  display: none !important;
-}
-/* タブナビゲーション: 常に非表示 */
-[data-testid="tab-navigation"], div[class*="tabContainer"] {
-  display: none !important;
-}
-main { padding-bottom: 0 !important; }
-`.trim();
-
-// DOM 構築前に注入: ネイティブアプリフラグ設定 + CSS 非表示（早期実行）
+// DOM 構築前に注入: ネイティブアプリフラグ設定 + URL に応じた CSS 非表示
 const INJECTED_JS_BEFORE_CONTENT_LOADED = `
 (function() {
   window.__AIKINOTE_NATIVE_APP__ = true;
   try {
+    var path = window.location.pathname.replace(/^\\/[a-z]{2}\\//, '/');
+    var css = [];
+
+    // タブナビゲーション: 常に非表示
+    css.push('[data-testid="tab-navigation"], div[class*="tabContainer"] { display: none !important; }');
+    css.push('main { padding-bottom: 0 !important; }');
+
+    // NavigationDrawer の overlay と drawer は常に visible
+    css.push('[class*="overlay"], [class*="drawer"] { visibility: visible !important; }');
+
+    if (path.match(/^\\/(personal|mypage)/)) {
+      // Personal / MyPage: DefaultHeader を非表示（NavigationDrawer は残す）
+      css.push('[data-testid="default-header"] { visibility: hidden !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: none !important; overflow: visible !important; }');
+    } else if (path.match(/^\\/social\\/posts\\/?$/)) {
+      // Social フィード: SocialHeader（SocialFeedHeader の親）を非表示
+      // DefaultHeader は存在しないが念のため非表示
+      css.push('header { display: none !important; }');
+    }
+    // その他のページ: Web 版のヘッダーをそのまま表示
+
     var style = document.createElement('style');
     style.id = 'native-app-overrides';
-    style.textContent = ${JSON.stringify(HIDE_WEB_CHROME_CSS)};
+    style.textContent = css.join('\\n');
     var target = document.head || document.documentElement;
     if (target) target.appendChild(style);
   } catch(e) {}
@@ -50,26 +44,33 @@ const INJECTED_JS_BEFORE_CONTENT_LOADED = `
 true;
 `;
 
-// ページ読み込み後に注入: CSS 非表示の確実なフォールバック
+// ページ読み込み後に注入: フォールバック
 const INJECTED_JS_AFTER_LOAD = `
 (function() {
   window.__AIKINOTE_NATIVE_APP__ = true;
   if (!document.getElementById('native-app-overrides')) {
+    var path = window.location.pathname.replace(/^\\/[a-z]{2}\\//, '/');
+    var css = [];
+    css.push('[data-testid="tab-navigation"], div[class*="tabContainer"] { display: none !important; }');
+    css.push('main { padding-bottom: 0 !important; }');
+    css.push('[class*="overlay"], [class*="drawer"] { visibility: visible !important; }');
+    if (path.match(/^\\/(personal|mypage)/)) {
+      css.push('[data-testid="default-header"] { visibility: hidden !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: none !important; overflow: visible !important; }');
+    } else if (path.match(/^\\/social\\/posts\\/?$/)) {
+      css.push('header { display: none !important; }');
+    }
     var style = document.createElement('style');
     style.id = 'native-app-overrides';
-    style.textContent = ${JSON.stringify(HIDE_WEB_CHROME_CSS)};
+    style.textContent = css.join('\\n');
     (document.head || document.documentElement).appendChild(style);
   }
 })();
 true;
 `;
 
-type HeaderType = "default" | "social-feed" | "web";
-
 type AikiWebViewProps = {
   url: string;
   webViewRef: React.RefObject<WebView | null>;
-  headerType: HeaderType;
   onLoadEnd: () => void;
   onError: () => void;
   onNavigationStateChange: (canGoBack: boolean, url: string) => void;
@@ -78,7 +79,6 @@ type AikiWebViewProps = {
 export function AikiWebView({
   url,
   webViewRef,
-  headerType,
   onLoadEnd,
   onError,
   onNavigationStateChange,
@@ -89,33 +89,6 @@ export function AikiWebView({
     },
     [onNavigationStateChange],
   );
-
-  // ネイティブヘッダー表示時に対応する Web 版ヘッダーを非表示にする
-  const prevHeaderTypeRef = React.useRef(headerType);
-  React.useEffect(() => {
-    if (headerType === prevHeaderTypeRef.current) return;
-    prevHeaderTypeRef.current = headerType;
-
-    if (headerType === "social-feed") {
-      // SocialFeedHeader をネイティブで表示 → Web 版の SocialHeader を非表示に
-      webViewRef.current?.injectJavaScript(`
-        document.querySelectorAll('header').forEach(function(h) {
-          if (!h.hasAttribute('data-testid') || h.getAttribute('data-testid') !== 'default-header') {
-            h.classList.add('native-header-hidden');
-          }
-        });
-        true;
-      `);
-    } else {
-      // それ以外 → Web 版ヘッダーの非表示を解除
-      webViewRef.current?.injectJavaScript(`
-        document.querySelectorAll('.native-header-hidden').forEach(function(h) {
-          h.classList.remove('native-header-hidden');
-        });
-        true;
-      `);
-    }
-  }, [headerType, webViewRef]);
 
   const handleShouldStartLoad = useCallback(
     (event: { url: string }): boolean => {
@@ -163,7 +136,7 @@ export function AikiWebView({
       javaScriptEnabled={true}
       allowsBackForwardNavigationGestures={Platform.OS === "ios"}
       startInLoadingState={false}
-      // CSS インジェクション（二重注入で確実性を確保）
+      // CSS インジェクション（URL に応じて動的に CSS を生成）
       injectedJavaScriptBeforeContentLoaded={INJECTED_JS_BEFORE_CONTENT_LOADED}
       injectedJavaScript={INJECTED_JS_AFTER_LOAD}
       // コールバック

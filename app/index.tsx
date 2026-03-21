@@ -110,7 +110,6 @@ export default function HomeScreen() {
         <AikiWebView
           url={webView.sourceUrl}
           webViewRef={webView.ref}
-          headerType={headerType}
           onLoadEnd={handleLoadEnd}
           onError={webView.setError}
           onNavigationStateChange={handleNavigationStateChange}

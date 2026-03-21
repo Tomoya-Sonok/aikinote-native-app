@@ -49,7 +49,7 @@ dependencies:
     version: 15.0.10(expo@54.0.33)(react-native@0.81.5)
   phosphor-react-native:
     specifier: ^3.0.3
-    version: 3.0.3(react-native-svg@15.15.4)(react-native@0.81.5)(react@19.1.0)
+    version: 3.0.3(react-native-svg@15.12.1)(react-native@0.81.5)(react@19.1.0)
   react:
     specifier: 19.1.0
     version: 19.1.0
@@ -72,8 +72,8 @@ dependencies:
     specifier: ~4.16.0
     version: 4.16.0(react-native@0.81.5)(react@19.1.0)
   react-native-svg:
-    specifier: ^15.15.4
-    version: 15.15.4(react-native@0.81.5)(react@19.1.0)
+    specifier: ^15.12.1
+    version: 15.12.1(react-native@0.81.5)(react@19.1.0)
   react-native-web:
     specifier: ~0.21.0
     version: 0.21.2(react-dom@19.1.0)(react@19.1.0)
@@ -6627,7 +6627,7 @@ packages:
     engines: {node: '>=8'}
     dev: true
 
-  /phosphor-react-native@3.0.3(react-native-svg@15.15.4)(react-native@0.81.5)(react@19.1.0):
+  /phosphor-react-native@3.0.3(react-native-svg@15.12.1)(react-native@0.81.5)(react@19.1.0):
     resolution: {integrity: sha512-h8UIIG/V4pgm20uvkt7L8G/GsOWKaU7rnyu2jnGt1vKmaigE0GZWXOHoEw9wZcfATHwvUpr/mkubEG/nbKeJkg==}
     peerDependencies:
       react: '*'
@@ -6636,7 +6636,7 @@ packages:
     dependencies:
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
-      react-native-svg: 15.15.4(react-native@0.81.5)(react@19.1.0)
+      react-native-svg: 15.12.1(react-native@0.81.5)(react@19.1.0)
     dev: false
 
   /picocolors@1.1.1:
@@ -6905,8 +6905,8 @@ packages:
       warn-once: 0.1.1
     dev: false
 
-  /react-native-svg@15.15.4(react-native@0.81.5)(react@19.1.0):
-    resolution: {integrity: sha512-boT/vIRgj6zZKBpfTPJJiYWMbZE9duBMOwPK6kCSTgxsS947IFMOq9OgIFkpWZTB7t229H24pDRkh3W9ZK/J1A==}
+  /react-native-svg@15.12.1(react-native@0.81.5)(react@19.1.0):
+    resolution: {integrity: sha512-vCuZJDf8a5aNC2dlMovEv4Z0jjEUET53lm/iILFnFewa15b4atjVxU6Wirm6O9y6dEsdjDZVD7Q3QM4T1wlI8g==}
     peerDependencies:
       react: '*'
       react-native: '*'
