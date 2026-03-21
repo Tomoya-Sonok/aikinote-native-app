@@ -61,19 +61,38 @@ export type HeaderType = "default" | "social-feed" | "web";
  * - "default": ネイティブ DefaultHeader（ロゴ + メニュー）
  * - "social-feed": ネイティブ SocialFeedHeader（プロフィール + タイトル + 検索）
  * - "web": Web 版のヘッダーをそのまま表示
+ *
+ * Web 版で DefaultLayout（DefaultHeader）を使うページのみ "default" を返す。
+ * SocialHeader / MinimalLayout を使うページは "web" を返す。
  */
 export function getHeaderType(url: string): HeaderType {
   const normalized = normalizePathname(url);
   if (!normalized) return "web";
 
-  if (normalized.startsWith("/personal") || normalized.startsWith("/mypage")) {
-    return "default";
-  }
-
-  // /social/posts 完全一致（trailing slash, query 許容）
+  // /social/posts 完全一致（trailing slash, query 許容）→ ネイティブ SocialFeedHeader
   if (/^\/social\/posts\/?(\?.*)?$/.test(normalized)) {
     return "social-feed";
   }
 
+  // /mypage 完全一致 → DefaultHeader
+  if (/^\/mypage\/?$/.test(normalized)) {
+    return "default";
+  }
+
+  // /personal/pages 一覧 → DefaultHeader
+  if (/^\/personal\/pages\/?$/.test(normalized)) {
+    return "default";
+  }
+
+  // /personal/pages/[id] 詳細（/new や /[id]/edit は除外）→ DefaultHeader
+  if (
+    /^\/personal\/pages\/[^/]+\/?$/.test(normalized) &&
+    !normalized.startsWith("/personal/pages/new")
+  ) {
+    return "default";
+  }
+
+  // その他（/personal/pages/new, /personal/pages/[id]/edit, /personal/calendar,
+  //         /personal/stats, /social/*, /settings/*, 等）→ Web 版ヘッダー
   return "web";
 }

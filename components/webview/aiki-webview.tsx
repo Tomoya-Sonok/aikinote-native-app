@@ -9,34 +9,52 @@ import type {
 
 import { config } from "@/constants/config";
 
+// URL からヘッダータイプを判定する JS ヘルパー（tab-utils.ts の getHeaderType と同じロジック）
+const GET_HEADER_TYPE_JS = `
+function getHeaderType() {
+  var path = window.location.pathname.replace(/^\\/[a-z]{2}\\//, '/');
+  if (/^\\/social\\/posts\\/?($|\\?)/.test(path)) return 'social-feed';
+  if (/^\\/mypage\\/?$/.test(path)) return 'default';
+  if (/^\\/personal\\/pages\\/?$/.test(path)) return 'default';
+  if (/^\\/personal\\/pages\\/[^/]+\\/?$/.test(path) && !/^\\/personal\\/pages\\/new/.test(path)) return 'default';
+  return 'web';
+}
+`;
+
+// CSS 生成ロジック（ヘッダータイプに応じて異なる CSS を適用）
+const BUILD_CSS_JS = `
+function buildNativeAppCSS() {
+  var type = getHeaderType();
+  var css = [];
+
+  // タブナビゲーション: 常に非表示
+  css.push('[data-testid="tab-navigation"], div[class*="tabContainer"] { display: none !important; }');
+  css.push('main { padding-bottom: 0 !important; }');
+
+  if (type === 'default') {
+    // DefaultHeader ページ: visibility hidden で縮小（NavigationDrawer は残す）
+    css.push('header { visibility: hidden !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: none !important; overflow: visible !important; }');
+    css.push('[class*="overlay"], [class*="drawer"] { visibility: visible !important; }');
+  } else if (type === 'social-feed') {
+    // SocialFeedHeader ページ: header を完全非表示（NavigationDrawer なし）
+    css.push('header { display: none !important; }');
+  }
+  // type === 'web': ヘッダーは非表示にしない
+
+  return css.join('\\n');
+}
+`;
+
 // DOM 構築前に注入: ネイティブアプリフラグ設定 + URL に応じた CSS 非表示
 const INJECTED_JS_BEFORE_CONTENT_LOADED = `
 (function() {
   window.__AIKINOTE_NATIVE_APP__ = true;
   try {
-    var path = window.location.pathname.replace(/^\\/[a-z]{2}\\//, '/');
-    var css = [];
-
-    // タブナビゲーション: 常に非表示
-    css.push('[data-testid="tab-navigation"], div[class*="tabContainer"] { display: none !important; }');
-    css.push('main { padding-bottom: 0 !important; }');
-
-    // NavigationDrawer の overlay と drawer は常に visible
-    css.push('[class*="overlay"], [class*="drawer"] { visibility: visible !important; }');
-
-    if (path.match(/^\\/(personal|mypage)/)) {
-      // Personal / MyPage: DefaultHeader を非表示（NavigationDrawer は残す）
-      css.push('[data-testid="default-header"] { visibility: hidden !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: none !important; overflow: visible !important; }');
-    } else if (path.match(/^\\/social\\/posts\\/?$/)) {
-      // Social フィード: SocialHeader（SocialFeedHeader の親）を非表示
-      // DefaultHeader は存在しないが念のため非表示
-      css.push('header { display: none !important; }');
-    }
-    // その他のページ: Web 版のヘッダーをそのまま表示
-
+    ${GET_HEADER_TYPE_JS}
+    ${BUILD_CSS_JS}
     var style = document.createElement('style');
     style.id = 'native-app-overrides';
-    style.textContent = css.join('\\n');
+    style.textContent = buildNativeAppCSS();
     var target = document.head || document.documentElement;
     if (target) target.appendChild(style);
   } catch(e) {}
@@ -49,19 +67,11 @@ const INJECTED_JS_AFTER_LOAD = `
 (function() {
   window.__AIKINOTE_NATIVE_APP__ = true;
   if (!document.getElementById('native-app-overrides')) {
-    var path = window.location.pathname.replace(/^\\/[a-z]{2}\\//, '/');
-    var css = [];
-    css.push('[data-testid="tab-navigation"], div[class*="tabContainer"] { display: none !important; }');
-    css.push('main { padding-bottom: 0 !important; }');
-    css.push('[class*="overlay"], [class*="drawer"] { visibility: visible !important; }');
-    if (path.match(/^\\/(personal|mypage)/)) {
-      css.push('[data-testid="default-header"] { visibility: hidden !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: none !important; overflow: visible !important; }');
-    } else if (path.match(/^\\/social\\/posts\\/?$/)) {
-      css.push('header { display: none !important; }');
-    }
+    ${GET_HEADER_TYPE_JS}
+    ${BUILD_CSS_JS}
     var style = document.createElement('style');
     style.id = 'native-app-overrides';
-    style.textContent = css.join('\\n');
+    style.textContent = buildNativeAppCSS();
     (document.head || document.documentElement).appendChild(style);
   }
 })();
