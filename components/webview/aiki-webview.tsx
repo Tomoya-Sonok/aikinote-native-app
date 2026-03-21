@@ -69,22 +69,71 @@ true;
 `;
 }
 
-// ページ読み込み後に注入: CSS を現在の URL に基づいて常に更新 + localStorage 変更監視
+// ページ読み込み後に注入: CSS 更新 + URL 変更監視 + localStorage 変更監視
 const INJECTED_JS_AFTER_LOAD = `
 (function() {
   window.__AIKINOTE_NATIVE_APP__ = true;
   ${GET_HEADER_TYPE_JS}
   ${BUILD_CSS_JS}
 
-  // CSS を現在の URL に基づいて作成/更新（injectedJavaScriptBeforeContentLoaded が
-  // 再実行されないケースや古い URL で CSS が生成されたケースに対応）
-  var style = document.getElementById('native-app-overrides');
-  if (!style) {
-    style = document.createElement('style');
-    style.id = 'native-app-overrides';
-    (document.head || document.documentElement).appendChild(style);
+  // CSS を現在の URL に基づいて作成/更新
+  function updateCSS() {
+    var style = document.getElementById('native-app-overrides');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'native-app-overrides';
+      (document.head || document.documentElement).appendChild(style);
+    }
+    style.textContent = buildNativeAppCSS();
   }
-  style.textContent = buildNativeAppCSS();
+  updateCSS();
+
+  // ユーザー情報を DOM から抽出してネイティブに送信
+  function extractUserInfo() {
+    if (!window.ReactNativeWebView) return;
+    try {
+      var avatarImg = document.querySelector('button[aria-label*="プロフィール"] img');
+      var avatarUrl = avatarImg ? avatarImg.getAttribute('src') : null;
+      var profileAnchor = document.querySelector('a[href*="/social/profile/"]');
+      var userId = null;
+      if (profileAnchor) {
+        var href = profileAnchor.getAttribute('href');
+        var match = href ? href.match(/\\/social\\/profile\\/([^/?]+)/) : null;
+        if (match) userId = match[1];
+      }
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'USER_INFO',
+        payload: { profileImageUrl: avatarUrl, userId: userId }
+      }));
+    } catch(e) {}
+  }
+  extractUserInfo();
+
+  // クライアントサイド遷移（pushState/replaceState/popstate）を監視して CSS を動的に更新
+  if (!window.__urlChangeMonitorInstalled) {
+    window.__urlChangeMonitorInstalled = true;
+    var lastUrl = window.location.href;
+
+    function onUrlChange() {
+      if (window.location.href === lastUrl) return;
+      lastUrl = window.location.href;
+      updateCSS();
+      // URL 変更後に少し待ってからユーザー情報を再抽出（DOM レンダリング待ち）
+      setTimeout(extractUserInfo, 500);
+    }
+
+    var origPushState = history.pushState.bind(history);
+    var origReplaceState = history.replaceState.bind(history);
+    history.pushState = function() {
+      origPushState.apply(this, arguments);
+      onUrlChange();
+    };
+    history.replaceState = function() {
+      origReplaceState.apply(this, arguments);
+      onUrlChange();
+    };
+    window.addEventListener('popstate', onUrlChange);
+  }
 
   // localStorage.setItem をラップして検索履歴の変更をネイティブに通知
   if (!window.__localStorageWrapped) {
@@ -101,26 +150,6 @@ const INJECTED_JS_AFTER_LOAD = `
         } catch(e) {}
       }
     };
-  }
-
-  // ユーザー情報を DOM から抽出してネイティブに送信
-  if (window.ReactNativeWebView && !window.__userInfoSent) {
-    window.__userInfoSent = true;
-    try {
-      var avatarImg = document.querySelector('button[aria-label*="プロフィール"] img');
-      var avatarUrl = avatarImg ? avatarImg.getAttribute('src') : null;
-      // SocialFeedHeader のプロフィールリンクから userId を抽出
-      var profileAnchor = document.querySelector('a[href*="/social/profile/"]');
-      var userId = null;
-      if (profileAnchor) {
-        var match = profileAnchor.getAttribute('href').match(//social/profile/([^/?]+)/);
-        if (match) userId = match[1];
-      }
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'USER_INFO',
-        payload: { profileImageUrl: avatarUrl, userId: userId }
-      }));
-    } catch(e) {}
   }
 })();
 true;
