@@ -69,18 +69,22 @@ true;
 `;
 }
 
-// ページ読み込み後に注入: CSS フォールバック + localStorage 変更監視
+// ページ読み込み後に注入: CSS を現在の URL に基づいて常に更新 + localStorage 変更監視
 const INJECTED_JS_AFTER_LOAD = `
 (function() {
   window.__AIKINOTE_NATIVE_APP__ = true;
-  if (!document.getElementById('native-app-overrides')) {
-    ${GET_HEADER_TYPE_JS}
-    ${BUILD_CSS_JS}
-    var style = document.createElement('style');
+  ${GET_HEADER_TYPE_JS}
+  ${BUILD_CSS_JS}
+
+  // CSS を現在の URL に基づいて作成/更新（injectedJavaScriptBeforeContentLoaded が
+  // 再実行されないケースや古い URL で CSS が生成されたケースに対応）
+  var style = document.getElementById('native-app-overrides');
+  if (!style) {
+    style = document.createElement('style');
     style.id = 'native-app-overrides';
-    style.textContent = buildNativeAppCSS();
     (document.head || document.documentElement).appendChild(style);
   }
+  style.textContent = buildNativeAppCSS();
 
   // localStorage.setItem をラップして検索履歴の変更をネイティブに通知
   if (!window.__localStorageWrapped) {
