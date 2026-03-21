@@ -14,14 +14,14 @@ type TabDefinition = {
 export const TABS: TabDefinition[] = [
   {
     id: "personal",
-    label: "稽古",
+    label: "ひとりで",
     path: "/personal/pages",
     icon: "pencil-outline",
     activeIcon: "pencil",
   },
   {
     id: "social",
-    label: "みんな",
+    label: "みんなで",
     path: "/social/posts",
     icon: "chatbubbles-outline",
     activeIcon: "chatbubbles",
@@ -37,7 +37,6 @@ export const TABS: TabDefinition[] = [
 
 /**
  * URL からアクティブなタブを判定する。
- * タブに該当しないページ（/settings 等）では null を返す。
  */
 export function getActiveTab(url: string): TabId | null {
   try {
