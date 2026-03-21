@@ -91,7 +91,12 @@ export function AikiWebView({
   );
 
   const handleShouldStartLoad = useCallback(
-    (event: { url: string }): boolean => {
+    (event: { url: string; isTopFrame?: boolean }): boolean => {
+      // iframe（YouTube embed 等）のリクエストは WebView 内で許可
+      if (event.isTopFrame === false) {
+        return true;
+      }
+
       const { url: requestUrl } = event;
 
       // 同一ドメインへのリクエストは WebView 内で処理
@@ -135,6 +140,8 @@ export function AikiWebView({
       // ナビゲーション
       javaScriptEnabled={true}
       allowsBackForwardNavigationGestures={Platform.OS === "ios"}
+      allowsInlineMediaPlayback={true}
+      mediaPlaybackRequiresUserAction={false}
       startInLoadingState={false}
       // CSS インジェクション（URL に応じて動的に CSS を生成）
       injectedJavaScriptBeforeContentLoaded={INJECTED_JS_BEFORE_CONTENT_LOADED}
