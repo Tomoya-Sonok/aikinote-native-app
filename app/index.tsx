@@ -146,6 +146,7 @@ export default function HomeScreen() {
       )}
       {headerType === "social-feed" && (
         <SocialFeedNativeHeader
+          profileImageUrl={profileImageUrl}
           onProfilePress={handleProfilePress}
           onSearchPress={handleSearchPress}
         />
