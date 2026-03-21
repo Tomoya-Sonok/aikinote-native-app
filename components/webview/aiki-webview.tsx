@@ -33,9 +33,9 @@ function buildNativeAppCSS() {
   css.push('main { padding-bottom: 0 !important; }');
 
   if (type === 'default') {
-    // DefaultHeader ページ: visibility hidden で縮小（NavigationDrawer は残す）
+    // DefaultHeader ページ: visibility hidden で縮小（NavigationDrawer + プロフィールカードは残す）
     css.push('header { visibility: hidden !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: none !important; overflow: visible !important; }');
-    css.push('[class*="overlay"], [class*="drawer"] { visibility: visible !important; }');
+    css.push('[class*="overlay"], [class*="drawer"], [class*="profileCard"] { visibility: visible !important; }');
   } else if (type === 'social-feed') {
     // SocialFeedHeader ページ: header を完全非表示（NavigationDrawer なし）
     css.push('header { display: none !important; }');
@@ -101,6 +101,21 @@ const INJECTED_JS_AFTER_LOAD = `
         } catch(e) {}
       }
     };
+  }
+
+  // ユーザー情報を DOM から抽出してネイティブに送信
+  if (window.ReactNativeWebView && !window.__userInfoSent) {
+    window.__userInfoSent = true;
+    try {
+      var avatarImg = document.querySelector('button[aria-label*="プロフィール"] img');
+      var avatarUrl = avatarImg ? avatarImg.getAttribute('src') : null;
+      var profileLink = document.querySelector('a[href*="/mypage"] [class*="profileCardName"], [class*="profileCardName"]');
+      var username = profileLink ? profileLink.textContent : '';
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'USER_INFO',
+        payload: { profileImageUrl: avatarUrl, username: username }
+      }));
+    } catch(e) {}
   }
 })();
 true;

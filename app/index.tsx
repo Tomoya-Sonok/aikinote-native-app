@@ -1,5 +1,5 @@
 import { useNetInfo } from "@react-native-community/netinfo";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BackHandler, Platform, StyleSheet, View } from "react-native";
 import {
   SafeAreaView,
@@ -31,6 +31,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const activeTab = getActiveTab(webView.displayUrl);
   const headerType = getHeaderType(webView.displayUrl);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
 
   // Android: 戻るボタンで WebView 内の履歴を戻る
   useEffect(() => {
@@ -74,6 +75,13 @@ export default function HomeScreen() {
     webView.navigateInWebView("/personal/pages");
   }, [webView.navigateInWebView]);
 
+  // アバタータップ: Web 版の隠れたアバターボタンをクリックしてプロフィールカードを表示
+  const handleAvatarPress = useCallback(() => {
+    webView.executeScript(
+      `document.querySelector('button[aria-label*="プロフィール"]')?.click();`,
+    );
+  }, [webView.executeScript]);
+
   // メニューボタン: NavigationDrawer の開閉をトグル
   const handleMenuPress = useCallback(() => {
     webView.executeScript(`
@@ -86,7 +94,7 @@ export default function HomeScreen() {
     `);
   }, [webView.executeScript]);
 
-  // WebView からのメッセージ受信（検索履歴の同期等）
+  // WebView からのメッセージ受信
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
       try {
@@ -98,6 +106,8 @@ export default function HomeScreen() {
           const json = JSON.stringify(data.payload);
           updateSearchHistoryJson(json);
           saveSearchHistory(data.payload);
+        } else if (data.type === "USER_INFO" && data.payload) {
+          setProfileImageUrl(data.payload.profileImageUrl ?? null);
         }
       } catch {
         // パースエラーは無視
@@ -128,7 +138,9 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {headerType === "default" && (
         <NativeHeader
+          profileImageUrl={profileImageUrl}
           onLogoPress={handleLogoPress}
+          onAvatarPress={handleAvatarPress}
           onMenuPress={handleMenuPress}
         />
       )}
