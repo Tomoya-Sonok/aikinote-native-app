@@ -38,8 +38,8 @@ tar -xzf build-*.tar.gz -C /tmp/aikinote-build
 # シミュレーターを起動（デバイス名は環境に合わせて変更）
 xcrun simctl boot "iPhone 16 Pro" 2>/dev/null; open -a Simulator
 
-# アプリをインストール
-xcrun simctl install booted /tmp/aikinote-build/aikinotenativeapp.app
+# アプリをインストール（.app ファイルを自動検出）
+xcrun simctl install booted /tmp/aikinote-build/*.app
 ```
 
 > **Tips**: `xcrun simctl list devices available` で利用可能なデバイス一覧を確認できる
@@ -63,7 +63,7 @@ npx eas build --profile development:simulator --platform ios --local \
   && rm -rf /tmp/aikinote-build && mkdir -p /tmp/aikinote-build \
   && tar -xzf $(ls -t build-*.tar.gz | head -1) -C /tmp/aikinote-build \
   && xcrun simctl boot "iPhone 16 Pro" 2>/dev/null; open -a Simulator \
-  && xcrun simctl install booted /tmp/aikinote-build/aikinotenativeapp.app
+  && xcrun simctl install booted /tmp/aikinote-build/*.app
 ```
 
 ## Android 実機での動作確認
