@@ -5,6 +5,7 @@ import { WebView, type WebViewNavigation } from "react-native-webview";
 import type {
   WebViewErrorEvent,
   WebViewHttpErrorEvent,
+  WebViewMessageEvent,
 } from "react-native-webview/lib/WebViewTypes";
 
 import { config } from "@/constants/config";
@@ -45,10 +46,15 @@ function buildNativeAppCSS() {
 }
 `;
 
-// DOM 構築前に注入: ネイティブアプリフラグ設定 + URL に応じた CSS 非表示
-const INJECTED_JS_BEFORE_CONTENT_LOADED = `
+// DOM 構築前に注入: フラグ設定 + CSS 非表示 + localStorage 復元
+function buildBeforeContentLoadedJS(searchHistoryJson: string): string {
+  return `
 (function() {
   window.__AIKINOTE_NATIVE_APP__ = true;
+  try {
+    // localStorage に検索履歴を復元（AsyncStorage から読み込んだデータ）
+    localStorage.setItem('aikinote_search_history', ${JSON.stringify(searchHistoryJson)});
+  } catch(e) {}
   try {
     ${GET_HEADER_TYPE_JS}
     ${BUILD_CSS_JS}
@@ -61,8 +67,9 @@ const INJECTED_JS_BEFORE_CONTENT_LOADED = `
 })();
 true;
 `;
+}
 
-// ページ読み込み後に注入: フォールバック
+// ページ読み込み後に注入: CSS フォールバック + localStorage 変更監視
 const INJECTED_JS_AFTER_LOAD = `
 (function() {
   window.__AIKINOTE_NATIVE_APP__ = true;
@@ -74,6 +81,23 @@ const INJECTED_JS_AFTER_LOAD = `
     style.textContent = buildNativeAppCSS();
     (document.head || document.documentElement).appendChild(style);
   }
+
+  // localStorage.setItem をラップして検索履歴の変更をネイティブに通知
+  if (!window.__localStorageWrapped) {
+    window.__localStorageWrapped = true;
+    var origSetItem = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function(key, value) {
+      origSetItem(key, value);
+      if (key === 'aikinote_search_history' && window.ReactNativeWebView) {
+        try {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'SEARCH_HISTORY_UPDATED',
+            payload: JSON.parse(value)
+          }));
+        } catch(e) {}
+      }
+    };
+  }
 })();
 true;
 `;
@@ -81,16 +105,20 @@ true;
 type AikiWebViewProps = {
   url: string;
   webViewRef: React.RefObject<WebView | null>;
+  searchHistoryJson: string;
   onLoadEnd: () => void;
   onError: () => void;
+  onMessage: (event: WebViewMessageEvent) => void;
   onNavigationStateChange: (canGoBack: boolean, url: string) => void;
 };
 
 export function AikiWebView({
   url,
   webViewRef,
+  searchHistoryJson,
   onLoadEnd,
   onError,
+  onMessage,
   onNavigationStateChange,
 }: AikiWebViewProps) {
   const handleNavigationStateChange = useCallback(
@@ -153,11 +181,14 @@ export function AikiWebView({
       allowsInlineMediaPlayback={true}
       mediaPlaybackRequiresUserAction={false}
       startInLoadingState={false}
-      // CSS インジェクション（URL に応じて動的に CSS を生成）
-      injectedJavaScriptBeforeContentLoaded={INJECTED_JS_BEFORE_CONTENT_LOADED}
+      // JS インジェクション（CSS 非表示 + localStorage 復元 + 変更監視）
+      injectedJavaScriptBeforeContentLoaded={buildBeforeContentLoadedJS(
+        searchHistoryJson,
+      )}
       injectedJavaScript={INJECTED_JS_AFTER_LOAD}
       // コールバック
       onLoadEnd={onLoadEnd}
+      onMessage={onMessage}
       onError={handleError}
       onHttpError={handleHttpError}
       onNavigationStateChange={handleNavigationStateChange}

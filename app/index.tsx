@@ -5,6 +5,7 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import type { WebViewMessageEvent } from "react-native-webview/lib/WebViewTypes";
 import { useAppContext } from "@/app/_layout";
 import { NetworkError } from "@/components/error/network-error";
 import { NativeHeader } from "@/components/header/native-header";
@@ -13,10 +14,16 @@ import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikiWebView } from "@/components/webview/aiki-webview";
 import { useWebView } from "@/hooks/use-webview";
 import { getActiveTab, getHeaderType } from "@/lib/navigation/tab-utils";
+import { saveSearchHistory } from "@/lib/storage/webview-storage";
 
 export default function HomeScreen() {
-  const { initialUrl, onWebViewReady, pendingDeepLink, clearPendingDeepLink } =
-    useAppContext();
+  const {
+    initialUrl,
+    onWebViewReady,
+    pendingDeepLink,
+    clearPendingDeepLink,
+    searchHistoryJson,
+  } = useAppContext();
   const webView = useWebView(initialUrl);
   const netInfo = useNetInfo();
   const isOffline = netInfo.isConnected === false;
@@ -78,6 +85,21 @@ export default function HomeScreen() {
     `);
   }, [webView.executeScript]);
 
+  // WebView からのメッセージ受信（検索履歴の同期等）
+  const handleMessage = useCallback((event: WebViewMessageEvent) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (
+        data.type === "SEARCH_HISTORY_UPDATED" &&
+        Array.isArray(data.payload)
+      ) {
+        saveSearchHistory(data.payload);
+      }
+    } catch {
+      // パースエラーは無視
+    }
+  }, []);
+
   // SocialFeedHeader: プロフィール画像タップ
   const handleProfilePress = useCallback(() => {
     webView.navigateInWebView("/mypage");
@@ -119,8 +141,10 @@ export default function HomeScreen() {
         <AikiWebView
           url={webView.sourceUrl}
           webViewRef={webView.ref}
+          searchHistoryJson={searchHistoryJson}
           onLoadEnd={handleLoadEnd}
           onError={webView.setError}
+          onMessage={handleMessage}
           onNavigationStateChange={handleNavigationStateChange}
         />
       </View>

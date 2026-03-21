@@ -19,18 +19,18 @@ import {
 import { config } from "@/constants/config";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { toWebUrl } from "@/lib/deep-link";
+import { getSearchHistory } from "@/lib/storage/webview-storage";
 
 // アプリ起動時にスプラッシュスクリーンを維持
 SplashScreen.preventAutoHideAsync();
 
 type AppContextValue = {
   initialUrl: string;
-  /** WebView ロード完了時に呼び出す（スプラッシュを非表示にする） */
   onWebViewReady: () => void;
-  /** アプリ実行中に受け取ったディープリンクの URL（WebView で開く） */
   pendingDeepLink: string | null;
-  /** ディープリンクを処理済みにする */
   clearPendingDeepLink: () => void;
+  /** AsyncStorage から読み込んだ検索履歴 JSON（WebView の localStorage に復元用） */
+  searchHistoryJson: string;
 };
 
 const AppContext = createContext<AppContextValue>({
@@ -38,6 +38,7 @@ const AppContext = createContext<AppContextValue>({
   onWebViewReady: () => {},
   pendingDeepLink: null,
   clearPendingDeepLink: () => {},
+  searchHistoryJson: "[]",
 });
 
 export function useAppContext() {
@@ -52,6 +53,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [initialUrl, setInitialUrl] = useState(config.webBaseUrl);
   const [pendingDeepLink, setPendingDeepLink] = useState<string | null>(null);
+  const [searchHistoryJson, setSearchHistoryJson] = useState("[]");
   const [isReady, setIsReady] = useState(false);
   const splashHidden = useRef(false);
 
@@ -62,14 +64,17 @@ export default function RootLayout() {
     }
   }, []);
 
-  // コールドスタート: 起動時のディープリンクを取得して初期 URL に設定
+  // コールドスタート: 起動時のディープリンク取得 + AsyncStorage から検索履歴読み込み
   useEffect(() => {
-    Linking.getInitialURL().then((url) => {
-      if (url) {
-        setInitialUrl(toWebUrl(url));
-      }
-      setIsReady(true);
-    });
+    Promise.all([Linking.getInitialURL(), getSearchHistory()]).then(
+      ([url, history]) => {
+        if (url) {
+          setInitialUrl(toWebUrl(url));
+        }
+        setSearchHistoryJson(JSON.stringify(history));
+        setIsReady(true);
+      },
+    );
   }, []);
 
   // ウォームスタート: アプリ実行中のディープリンクを受け取る
@@ -96,8 +101,15 @@ export default function RootLayout() {
       onWebViewReady: hideSplash,
       pendingDeepLink,
       clearPendingDeepLink,
+      searchHistoryJson,
     }),
-    [initialUrl, hideSplash, pendingDeepLink, clearPendingDeepLink],
+    [
+      initialUrl,
+      hideSplash,
+      pendingDeepLink,
+      clearPendingDeepLink,
+      searchHistoryJson,
+    ],
   );
 
   // ディープリンクの初期 URL 取得が完了するまで待機
