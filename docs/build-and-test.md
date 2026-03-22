@@ -9,12 +9,12 @@
 
 ## 再ビルドが必要なケース
 
-| 変更内容 | 再ビルド |
-|---|---|
-| `.tsx` / `.ts` ファイルの編集 | 不要（開発サーバー再起動で反映） |
-| `app.json` の変更（アプリ名、アイコン等） | **必要** |
-| ネイティブモジュールの追加/削除（`pnpm add ...`） | **必要** |
-| `eas.json` の変更 | **必要** |
+| 変更内容                                          | 再ビルド                         |
+| ------------------------------------------------- | -------------------------------- |
+| `.tsx` / `.ts` ファイルの編集                     | 不要（開発サーバー再起動で反映） |
+| `app.json` の変更（アプリ名、アイコン等）         | **必要**                         |
+| ネイティブモジュールの追加/削除（`pnpm add ...`） | **必要**                         |
+| `eas.json` の変更                                 | **必要**                         |
 
 ## iOS シミュレーターでの動作確認
 
@@ -36,10 +36,10 @@ rm -rf /tmp/aikinote-build && mkdir -p /tmp/aikinote-build
 tar -xzf build-*.tar.gz -C /tmp/aikinote-build
 
 # シミュレーターを起動（デバイス名は環境に合わせて変更）
-xcrun simctl boot "iPhone 16 Pro" 2>/dev/null; open -a Simulator
+xcrun simctl boot "iPhone 17" 2>/dev/null; open -a Simulator
 
-# アプリをインストール（.app ファイルを自動検出）
-xcrun simctl install booted /tmp/aikinote-build/*.app
+# アプリをインストール
+xcrun simctl install booted /tmp/aikinote-build/AikiNote.app
 ```
 
 > **Tips**: `xcrun simctl list devices available` で利用可能なデバイス一覧を確認できる
