@@ -19,6 +19,7 @@ import {
 import { config } from "@/constants/config";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { toWebUrl } from "@/lib/deep-link";
+import { RevenueCatProvider } from "@/lib/purchases/RevenueCatProvider";
 import { getSearchHistory } from "@/lib/storage/webview-storage";
 
 // アプリ起動時にスプラッシュスクリーンを維持
@@ -125,13 +126,17 @@ export default function RootLayout() {
   }
 
   return (
-    <AppContext.Provider value={contextValue}>
-      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </AppContext.Provider>
+    <RevenueCatProvider>
+      <AppContext.Provider value={contextValue}>
+        <ThemeProvider
+          value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+        >
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+          </Stack>
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </AppContext.Provider>
+    </RevenueCatProvider>
   );
 }

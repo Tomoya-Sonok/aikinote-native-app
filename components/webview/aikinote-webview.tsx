@@ -135,6 +135,73 @@ const INJECTED_JS_AFTER_LOAD = `
     window.addEventListener('popstate', onUrlChange);
   }
 
+  // ネイティブ IAP ブリッジ: WebView から Paywall / Customer Center / 状態取得を呼び出す
+  if (!window.__iapBridgeInstalled) {
+    window.__iapBridgeInstalled = true;
+
+    // Native → WebView メッセージのコールバック
+    window.__onNativeMessage = function(msg) {
+      if (msg.type === 'IAP_RESULT' && window.__iapResolve) {
+        window.__iapResolve(msg.payload);
+        window.__iapResolve = null;
+      }
+      if (msg.type === 'SUBSCRIPTION_STATUS' && window.__statusResolve) {
+        window.__statusResolve(msg.payload);
+        window.__statusResolve = null;
+      }
+    };
+
+    // Premium 状態変更のコールバック
+    window.__onSubscriptionStatusChange = function(isPremium) {
+      window.__AIKINOTE_PREMIUM__ = isPremium;
+      window.dispatchEvent(new CustomEvent('aikinote:premiumChanged', { detail: { isPremium: isPremium } }));
+    };
+
+    // Paywall を表示して結果を返す
+    window.showNativePaywall = function() {
+      return new Promise(function(resolve) {
+        if (!window.ReactNativeWebView) {
+          resolve({ success: false, isPremium: false });
+          return;
+        }
+        window.__iapResolve = resolve;
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'INITIATE_IAP' }));
+        // 60秒タイムアウト
+        setTimeout(function() {
+          if (window.__iapResolve) {
+            window.__iapResolve({ success: false, isPremium: false });
+            window.__iapResolve = null;
+          }
+        }, 60000);
+      });
+    };
+
+    // Customer Center を表示
+    window.showNativeCustomerCenter = function() {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SHOW_CUSTOMER_CENTER' }));
+      }
+    };
+
+    // サブスクリプション状態を問い合わせ
+    window.getNativeSubscriptionStatus = function() {
+      return new Promise(function(resolve) {
+        if (!window.ReactNativeWebView) {
+          resolve({ isPremium: false });
+          return;
+        }
+        window.__statusResolve = resolve;
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'GET_SUBSCRIPTION_STATUS' }));
+        setTimeout(function() {
+          if (window.__statusResolve) {
+            window.__statusResolve({ isPremium: false });
+            window.__statusResolve = null;
+          }
+        }, 5000);
+      });
+    };
+  }
+
   // localStorage.setItem をラップして検索履歴の変更をネイティブに通知
   if (!window.__localStorageWrapped) {
     window.__localStorageWrapped = true;
@@ -155,7 +222,7 @@ const INJECTED_JS_AFTER_LOAD = `
 true;
 `;
 
-type AikiWebViewProps = {
+type AikinoteWebViewProps = {
   url: string;
   webViewRef: React.RefObject<WebView | null>;
   searchHistoryJson: string;
@@ -165,7 +232,7 @@ type AikiWebViewProps = {
   onNavigationStateChange: (canGoBack: boolean, url: string) => void;
 };
 
-export function AikiWebView({
+export function AikinoteWebView({
   url,
   webViewRef,
   searchHistoryJson,
@@ -173,7 +240,7 @@ export function AikiWebView({
   onError,
   onMessage,
   onNavigationStateChange,
-}: AikiWebViewProps) {
+}: AikinoteWebViewProps) {
   const handleNavigationStateChange = useCallback(
     (navState: WebViewNavigation) => {
       onNavigationStateChange(navState.canGoBack, navState.url);

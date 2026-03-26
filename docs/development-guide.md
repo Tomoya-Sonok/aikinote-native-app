@@ -102,7 +102,7 @@ aikinote-native-app/
 │   ├── tab-bar/
 │   │   └── native-tab-bar.tsx         # ネイティブタブバー（3タブ）
 │   ├── webview/
-│   │   └── aiki-webview.tsx           # WebView ラッパー（CSS注入、postMessage、URL監視）
+│   │   └── aikinote-webview.tsx           # WebView ラッパー（CSS注入、postMessage、URL監視）
 │   ├── error/
 │   │   └── network-error.tsx          # エラー表示
 │   ├── themed-text.tsx
@@ -213,3 +213,13 @@ iOS のローカルビルド（`--local`）には以下が必要：
 - **Xcode**（`xcodebuild` コマンド）
 - **Fastlane**（`brew install fastlane`）
 - **CocoaPods**（`brew install cocoapods`）
+
+## 本番リリース時の注意事項
+
+### RevenueCat API キーの差し替え
+
+`lib/purchases/config.ts` に RevenueCat のテスト用 API キーがハードコードされている。本番リリース前に以下の対応が必要：
+
+1. RevenueCat ダッシュボードから本番用 API キーを取得
+2. `lib/purchases/config.ts` の `API_KEYS` を本番キーに差し替え、または EAS の環境変数（`EXPO_PUBLIC_REVENUECAT_API_KEY`）で管理するように変更
+3. iOS / Android それぞれ別キーが必要な場合は `API_KEYS.apple` / `API_KEYS.google` を個別に設定

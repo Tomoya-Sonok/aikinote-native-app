@@ -43,6 +43,14 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "react-native-purchases",
+        {
+          "ios": {
+            "usesStoreKit2JWS": true
+          }
+        }
       ]
     ],
     "experiments": {

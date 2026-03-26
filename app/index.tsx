@@ -1,6 +1,7 @@
 import { useNetInfo } from "@react-native-community/netinfo";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Platform, StyleSheet, View } from "react-native";
+import RevenueCatUI from "react-native-purchases-ui";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -11,9 +12,10 @@ import { NetworkError } from "@/components/error/network-error";
 import { NativeHeader } from "@/components/header/native-header";
 import { SocialFeedNativeHeader } from "@/components/header/social-feed-header";
 import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
-import { AikiWebView } from "@/components/webview/aiki-webview";
+import { AikinoteWebView } from "@/components/webview/aikinote-webview";
 import { useWebView } from "@/hooks/use-webview";
 import { getActiveTab, getHeaderType } from "@/lib/navigation/tab-utils";
+import { useRevenueCat } from "@/lib/purchases/RevenueCatProvider";
 import { saveSearchHistory } from "@/lib/storage/webview-storage";
 
 export default function HomeScreen() {
@@ -33,6 +35,8 @@ export default function HomeScreen() {
   const headerType = getHeaderType(webView.displayUrl);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const { identify, isPremium } = useRevenueCat();
+  const identifiedRef = useRef(false);
 
   // Android: 戻るボタンで WebView 内の履歴を戻る
   useEffect(() => {
@@ -95,6 +99,38 @@ export default function HomeScreen() {
     `);
   }, [webView.executeScript]);
 
+  // WebView → Native メッセージ結果を返す
+  const sendToWebView = useCallback(
+    (type: string, payload: Record<string, unknown>) => {
+      webView.executeScript(`
+        if (window.__onNativeMessage) {
+          window.__onNativeMessage(${JSON.stringify({ type, payload })});
+        }
+      `);
+    },
+    [webView.executeScript],
+  );
+
+  // Paywall を表示
+  const showPaywall = useCallback(async (): Promise<boolean> => {
+    try {
+      const result = await RevenueCatUI.presentPaywall();
+      return result === "PURCHASED" || result === "RESTORED";
+    } catch (error) {
+      console.error("[Paywall] 表示エラー:", error);
+      return false;
+    }
+  }, []);
+
+  // Customer Center を表示
+  const showCustomerCenter = useCallback(async () => {
+    try {
+      await RevenueCatUI.presentCustomerCenter();
+    } catch (error) {
+      console.error("[CustomerCenter] 表示エラー:", error);
+    }
+  }, []);
+
   // WebView からのメッセージ受信
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
@@ -110,13 +146,53 @@ export default function HomeScreen() {
         } else if (data.type === "USER_INFO" && data.payload) {
           setProfileImageUrl(data.payload.profileImageUrl ?? null);
           setUserId(data.payload.userId ?? null);
+        } else if (data.type === "INITIATE_IAP") {
+          // WebView 内で Premium 機能がリクエストされた → Paywall を表示
+          showPaywall().then((purchased) => {
+            sendToWebView("IAP_RESULT", {
+              success: purchased,
+              isPremium: purchased,
+            });
+          });
+        } else if (data.type === "SHOW_CUSTOMER_CENTER") {
+          // サブスクリプション管理画面を表示
+          showCustomerCenter();
+        } else if (data.type === "GET_SUBSCRIPTION_STATUS") {
+          // WebView からサブスクリプション状態を問い合わせ
+          sendToWebView("SUBSCRIPTION_STATUS", { isPremium });
         }
       } catch {
         // パースエラーは無視
       }
     },
-    [updateSearchHistoryJson],
+    [
+      updateSearchHistoryJson,
+      showPaywall,
+      showCustomerCenter,
+      sendToWebView,
+      isPremium,
+    ],
   );
+
+  // userId 取得後に RevenueCat に identify
+  useEffect(() => {
+    if (userId && !identifiedRef.current) {
+      identifiedRef.current = true;
+      identify(userId);
+    }
+  }, [userId, identify]);
+
+  // WebView に Premium 状態を通知
+  const webViewRef = webView.ref;
+  useEffect(() => {
+    if (!webViewRef.current) return;
+    webView.executeScript(`
+      window.__AIKINOTE_PREMIUM__ = ${isPremium};
+      if (window.__onSubscriptionStatusChange) {
+        window.__onSubscriptionStatusChange(${isPremium});
+      }
+    `);
+  }, [isPremium, webView.executeScript, webViewRef]);
 
   // SocialFeedHeader: プロフィール画像タップ → /social/profile/[userId]
   const handleProfilePress = useCallback(() => {
@@ -163,7 +239,7 @@ export default function HomeScreen() {
           headerType === "web" && { paddingTop: insets.top },
         ]}
       >
-        <AikiWebView
+        <AikinoteWebView
           url={webView.sourceUrl}
           webViewRef={webView.ref}
           searchHistoryJson={searchHistoryJson}
