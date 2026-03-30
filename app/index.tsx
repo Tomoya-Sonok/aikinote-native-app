@@ -162,24 +162,34 @@ export default function HomeScreen() {
           return;
         }
 
-        // 3. コールバック URL から code を抽出
+        // 3. コールバック URL からトークンを取得
         const url = new URL(result.url);
+        let access_token: string | null = null;
+        let refresh_token: string | null = null;
+
         const code = url.searchParams.get("code");
-        if (!code) {
-          console.error("[OAuth] コールバックに code がありません");
-          return;
+        if (code) {
+          // PKCE flow: code を session に交換
+          const { data: sessionData, error: sessionError } =
+            await supabase.auth.exchangeCodeForSession(code);
+
+          if (sessionError || !sessionData?.session) {
+            console.error("[OAuth] セッション交換エラー:", sessionError);
+            return;
+          }
+          access_token = sessionData.session.access_token;
+          refresh_token = sessionData.session.refresh_token;
+        } else {
+          // Implicit flow フォールバック: ハッシュフラグメントからトークンを取得
+          const hashParams = new URLSearchParams(url.hash.substring(1));
+          access_token = hashParams.get("access_token");
+          refresh_token = hashParams.get("refresh_token");
         }
 
-        // 4. code を session に交換（AsyncStorage の code_verifier を使用）
-        const { data: sessionData, error: sessionError } =
-          await supabase.auth.exchangeCodeForSession(code);
-
-        if (sessionError || !sessionData?.session) {
-          console.error("[OAuth] セッション交換エラー:", sessionError);
+        if (!access_token || !refresh_token) {
+          console.error("[OAuth] トークンを取得できませんでした");
           return;
         }
-
-        const { access_token, refresh_token } = sessionData.session;
 
         // 5. WebView 内の fetch で Cookie をセットし、認証済みページへ遷移
         webView.executeScript(`
