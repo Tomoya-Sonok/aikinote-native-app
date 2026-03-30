@@ -25,7 +25,9 @@ import { setupNotificationChannel } from "@/lib/push-notifications";
 import { getSearchHistory } from "@/lib/storage/webview-storage";
 
 // アプリ起動時にスプラッシュスクリーンを維持
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // Android 実機で "Unable to activate keep awake" が発生する場合があるが無視して続行
+});
 
 // フォアグラウンドでも通知バナーを表示
 Notifications.setNotificationHandler({
