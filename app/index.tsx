@@ -14,7 +14,6 @@ import { NativeHeader } from "@/components/header/native-header";
 import { SocialFeedNativeHeader } from "@/components/header/social-feed-header";
 import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikinoteWebView } from "@/components/webview/aikinote-webview";
-import { config } from "@/constants/config";
 import { useWebView } from "@/hooks/use-webview";
 import { getActiveTab, getHeaderType } from "@/lib/navigation/tab-utils";
 import { useRevenueCat } from "@/lib/purchases/RevenueCatProvider";
