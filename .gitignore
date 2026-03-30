@@ -38,7 +38,6 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-google-services.json
 app-example
 
 # generated native folders
