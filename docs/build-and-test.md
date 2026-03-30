@@ -50,7 +50,7 @@ xcrun simctl install booted /tmp/aikinote-build/AikiNote.app
 ### 3. 開発サーバー起動 & アプリ起動
 
 ```bash
-# ローカル開発サーバー（localhost:3000）に接続する場合
+# シミュレーター/エミュレーターの場合（localhost:3000 に接続）
 pnpm start
 
 # 本番（aikinote.com）に接続する場合
@@ -58,6 +58,8 @@ pnpm start:prod
 ```
 
 シミュレーター上の **AikiNote** アイコンをタップしてアプリを起動。
+
+> **Note**: `pnpm start`（localhost 接続）は**シミュレーター/エミュレーター専用**。実機では `pnpm start:prod` を使うこと（詳細は下記「開発サーバーの使い分け」を参照）。
 
 ### ワンライナー（ビルド → インストール → 起動）
 
@@ -116,11 +118,12 @@ adb install -r aikinote-dev.apk
 
 ```bash
 # Mac と Android 端末が同じ Wi-Fi に接続されている状態で
-pnpm start        # ローカル開発サーバー
-pnpm start:prod   # 本番環境
+pnpm start:prod   # 本番（aikinote.com）に接続 ← 実機はこちらを使用
 ```
 
 Android 端末上の **AikiNote** アイコンをタップしてアプリを起動。
+
+> **注意**: `pnpm start`（localhost 接続）は Android 実機では使えません（`10.0.2.2` はエミュレーター専用の特殊アドレスです）。実機でローカル開発サーバーに接続したい場合は下記「開発サーバーの使い分け」を参照してください。
 
 ## ローカルビルドの前提ツール（iOS）
 
@@ -136,6 +139,22 @@ brew install cocoapods
 - **Fastlane**: iOS ビルドの自動化ツール
 - **CocoaPods**: iOS のネイティブ依存管理
 
+## 開発サーバーの使い分け
+
+WebView の接続先は開発サーバーの起動コマンドで決まる。
+
+| コマンド | 接続先 | 用途 |
+|---|---|---|
+| `pnpm start` | `localhost:3000`（iOS）/ `10.0.2.2:3000`（Android） | **シミュレーター / エミュレーター** でのローカル開発 |
+| `pnpm start:prod` | `https://aikinote.com` | **実機テスト** や本番環境での動作確認 |
+| `EXPO_PUBLIC_WEB_URL=http://<Mac IP>:3000 pnpm start` | Mac のローカル IP | **実機 + ローカル開発サーバー**（Web 版の未リリース変更を実機で確認したい時） |
+
+### なぜ `pnpm start` は実機で動かないのか
+
+- `localhost` / `10.0.2.2` はシミュレーター/エミュレーター内からホスト Mac を指す特殊アドレス
+- 実機はネットワーク上の別デバイスなので、これらのアドレスでは Mac に到達できない
+- 実機からローカルサーバーに接続するには Mac の実際の IP アドレス（`ipconfig getifaddr en0` で確認）を指定する必要がある
+
 ## トラブルシューティング
 
 ### アプリがシミュレーターに表示されない
@@ -144,6 +163,11 @@ brew install cocoapods
 # インストール済みアプリを確認
 xcrun simctl listapps booted | grep aikinote
 ```
+
+### 実機で画面が真っ白になる
+
+- `pnpm start` ではなく **`pnpm start:prod`** を使っているか確認（上記「開発サーバーの使い分け」参照）
+- ローカルサーバーに実機から接続したい場合は `EXPO_PUBLIC_WEB_URL=http://<Mac IP>:3000 pnpm start` を使用
 
 ### 開発サーバーに接続できない
 
