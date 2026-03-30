@@ -17,6 +17,7 @@ import { AikinoteWebView } from "@/components/webview/aikinote-webview";
 import { useWebView } from "@/hooks/use-webview";
 import { getActiveTab, getHeaderType } from "@/lib/navigation/tab-utils";
 import { useRevenueCat } from "@/lib/purchases/RevenueCatProvider";
+import { registerForPushNotifications } from "@/lib/push-notifications";
 import { saveSearchHistory } from "@/lib/storage/webview-storage";
 import { supabase } from "@/lib/supabase";
 
@@ -39,6 +40,8 @@ export default function HomeScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const { identify, isPremium } = useRevenueCat();
   const identifiedRef = useRef(false);
+  const pushTokenRegisteredRef = useRef(false);
+  const pushTokenRef = useRef<string | null>(null);
 
   // Android: 戻るボタンで WebView 内の履歴を戻る
   useEffect(() => {
@@ -249,6 +252,23 @@ export default function HomeScreen() {
         ) {
           // WebView から OAuth リクエスト（Google / Apple）
           handleNativeOAuth(data.payload.provider);
+        } else if (data.type === "USER_LOGGED_OUT") {
+          // ログアウト検知 → プッシュトークン削除 + 状態リセット
+          if (pushTokenRef.current) {
+            webView.executeScript(`
+              fetch('/api/push-tokens', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expo_push_token: '${pushTokenRef.current}' }),
+                credentials: 'include'
+              }).catch(function(e) {});
+            `);
+            pushTokenRef.current = null;
+            pushTokenRegisteredRef.current = false;
+          }
+          identifiedRef.current = false;
+          setUserId(null);
+          setProfileImageUrl(null);
         }
       } catch {
         // パースエラーは無視
@@ -261,16 +281,37 @@ export default function HomeScreen() {
       sendToWebView,
       isPremium,
       handleNativeOAuth,
+      webView.executeScript,
     ],
   );
 
-  // userId 取得後に RevenueCat に identify
+  // userId 取得後に RevenueCat に identify + プッシュトークン登録
   useEffect(() => {
     if (userId && !identifiedRef.current) {
       identifiedRef.current = true;
       identify(userId);
     }
-  }, [userId, identify]);
+    // プッシュトークン登録（userId 取得後に1回だけ）
+    if (userId && !pushTokenRegisteredRef.current) {
+      pushTokenRegisteredRef.current = true;
+      registerForPushNotifications().then((pushToken) => {
+        if (pushToken) {
+          pushTokenRef.current = pushToken;
+          webView.executeScript(`
+            fetch('/api/push-tokens', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                expo_push_token: '${pushToken}',
+                platform: '${Platform.OS}'
+              }),
+              credentials: 'include'
+            }).catch(function(e) { console.error('Push token registration error:', e); });
+          `);
+        }
+      });
+    }
+  }, [userId, identify, webView.executeScript]);
 
   // WebView に Premium 状態を通知
   const webViewRef = webView.ref;

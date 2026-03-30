@@ -4,6 +4,7 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import * as Linking from "expo-linking";
+import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -20,10 +21,22 @@ import { config } from "@/constants/config";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { toWebUrl } from "@/lib/deep-link";
 import { RevenueCatProvider } from "@/lib/purchases/RevenueCatProvider";
+import { setupNotificationChannel } from "@/lib/push-notifications";
 import { getSearchHistory } from "@/lib/storage/webview-storage";
 
 // アプリ起動時にスプラッシュスクリーンを維持
 SplashScreen.preventAutoHideAsync();
+
+// フォアグラウンドでも通知バナーを表示
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 type AppContextValue = {
   initialUrl: string;
@@ -64,6 +77,37 @@ export default function RootLayout() {
       splashHidden.current = true;
       SplashScreen.hideAsync();
     }
+  }, []);
+
+  // Android 通知チャンネル設定
+  useEffect(() => {
+    setupNotificationChannel();
+  }, []);
+
+  // 通知タップ → 該当投稿に遷移
+  useEffect(() => {
+    // コールドスタート: アプリ起動のきっかけとなった通知を処理
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      const postId = response?.notification.request.content.data?.postId as
+        | string
+        | undefined;
+      if (postId) {
+        setPendingDeepLink(`${config.webBaseUrl}/social/posts/${postId}`);
+      }
+    });
+
+    // ウォームスタート: アプリ実行中の通知タップを処理
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const postId = response.notification.request.content.data?.postId as
+          | string
+          | undefined;
+        if (postId) {
+          setPendingDeepLink(`${config.webBaseUrl}/social/posts/${postId}`);
+        }
+      },
+    );
+    return () => subscription.remove();
   }, []);
 
   // コールドスタート: 起動時のディープリンク取得 + AsyncStorage から検索履歴読み込み

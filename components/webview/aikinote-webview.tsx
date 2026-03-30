@@ -120,6 +120,13 @@ const INJECTED_JS_AFTER_LOAD = `
       updateCSS();
       // URL 変更後に少し待ってからユーザー情報を再抽出（DOM レンダリング待ち）
       setTimeout(extractUserInfo, 500);
+      // ログアウト検知: /login や /logout への遷移時にネイティブに通知
+      var path = window.location.pathname.replace(/^\\/[a-z]{2}\\//, '/');
+      if (path === '/login' || path === '/logout' || path === '/') {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGGED_OUT' }));
+        }
+      }
     }
 
     var origPushState = history.pushState.bind(history);
