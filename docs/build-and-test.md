@@ -21,19 +21,22 @@
 ### 1. ビルド
 
 ```bash
+cd /path/to/aikinote-native-app
 npx eas build --profile development:simulator --platform ios --local
 ```
 
+- **プロジェクトルートで実行すること**（ビルド成果物 `build-XXXXX.tar.gz` がここに生成される）
 - ビルド完了まで数分かかる
-- 完了すると `build-XXXXX.tar.gz` がプロジェクトルートに生成される
 - 暗号化の質問（`iOS app only uses standard/exempt encryption?`）には **Yes** と回答
 
 ### 2. シミュレーターにインストール
 
+**注意**: 以下のコマンドはすべて **プロジェクトルート**（`build-*.tar.gz` がある場所）で実行すること。
+
 ```bash
-# ビルド成果物を展開
+# ビルド成果物を展開（最新のビルドを使用）
 rm -rf /tmp/aikinote-build && mkdir -p /tmp/aikinote-build
-tar -xzf build-*.tar.gz -C /tmp/aikinote-build
+tar -xzf "$(ls -t build-*.tar.gz | head -1)" -C /tmp/aikinote-build
 
 # シミュレーターを起動（デバイス名は環境に合わせて変更）
 xcrun simctl boot "iPhone 17" 2>/dev/null; open -a Simulator
@@ -58,12 +61,14 @@ pnpm start:prod
 
 ### ワンライナー（ビルド → インストール → 起動）
 
+プロジェクトルートで実行:
+
 ```bash
 npx eas build --profile development:simulator --platform ios --local \
   && rm -rf /tmp/aikinote-build && mkdir -p /tmp/aikinote-build \
-  && tar -xzf $(ls -t build-*.tar.gz | head -1) -C /tmp/aikinote-build \
-  && xcrun simctl boot "iPhone 16 Pro" 2>/dev/null; open -a Simulator \
-  && xcrun simctl install booted /tmp/aikinote-build/*.app
+  && tar -xzf "$(ls -t build-*.tar.gz | head -1)" -C /tmp/aikinote-build \
+  && xcrun simctl boot "iPhone 17" 2>/dev/null; open -a Simulator \
+  && xcrun simctl install booted /tmp/aikinote-build/AikiNote.app
 ```
 
 ## Android 実機での動作確認
