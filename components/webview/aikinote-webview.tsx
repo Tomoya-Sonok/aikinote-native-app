@@ -88,41 +88,43 @@ const INJECTED_JS_AFTER_LOAD = `
   }
   updateCSS();
 
-  // ユーザー情報を取得してネイティブに送信
-  function extractUserInfo() {
+  // ユーザー情報を API から取得してネイティブに送信（DOM 非依存）
+  function fetchUserInfo() {
     if (!window.ReactNativeWebView) return;
-    try {
-      // アバターは DOM から取得
-      var avatarImg = document.querySelector('button[aria-label*="プロフィール"] img');
-      var avatarUrl = avatarImg ? avatarImg.getAttribute('src') : null;
 
-      // userId は API から取得（DOM に依存しない）
-      fetch('/api/auth/token', { method: 'POST', credentials: 'include' })
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .then(function(data) {
-          if (!data || !data.token || !window.ReactNativeWebView) return;
-          try {
-            // JWT の payload を decode（base64url → JSON）
-            var parts = data.token.split('.');
-            if (parts.length < 2) return;
-            var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-            var userId = payload.userId || null;
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'USER_INFO',
-              payload: { profileImageUrl: avatarUrl, userId: userId }
-            }));
-          } catch(e) {}
-        })
-        .catch(function() {
-          // API 未認証時はアバターのみ送信
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'USER_INFO',
-            payload: { profileImageUrl: avatarUrl, userId: null }
-          }));
-        });
-    } catch(e) {}
+    fetch('/api/auth/token', { method: 'POST', credentials: 'include' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data || !data.token || !window.ReactNativeWebView) return;
+        try {
+          var parts = data.token.split('.');
+          if (parts.length < 2) return;
+          var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          var userId = payload.userId || null;
+          if (!userId) return;
+
+          // userId が取得できたらプロフィール情報も取得
+          fetch('/api/user/' + userId, { credentials: 'include' })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(userData) {
+              var avatarUrl = (userData && userData.data && userData.data.profile_image_url) || null;
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'USER_INFO',
+                payload: { profileImageUrl: avatarUrl, userId: userId }
+              }));
+            })
+            .catch(function() {
+              // プロフィール取得失敗でも userId は送信
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'USER_INFO',
+                payload: { profileImageUrl: null, userId: userId }
+              }));
+            });
+        } catch(e) {}
+      })
+      .catch(function() {});
   }
-  extractUserInfo();
+  fetchUserInfo();
 
   // クライアントサイド遷移（pushState/replaceState/popstate）を監視して CSS を動的に更新
   if (!window.__urlChangeMonitorInstalled) {
@@ -134,7 +136,7 @@ const INJECTED_JS_AFTER_LOAD = `
       lastUrl = window.location.href;
       updateCSS();
       // URL 変更後に少し待ってからユーザー情報を再抽出（DOM レンダリング待ち）
-      setTimeout(extractUserInfo, 500);
+      setTimeout(fetchUserInfo, 500);
       // ログアウト検知: /login や /logout への遷移時にネイティブに通知
       var path = window.location.pathname.replace(/^\\/[a-z]{2}\\//, '/');
       if (path === '/login' || path === '/logout' || path === '/') {
