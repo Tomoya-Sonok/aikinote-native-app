@@ -202,6 +202,16 @@ const INJECTED_JS_AFTER_LOAD = `
     };
   }
 
+  // OAuth ブリッジ（Google / Apple 共通）
+  window.startNativeOAuth = function(provider) {
+    if (window.ReactNativeWebView) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'START_NATIVE_OAUTH',
+        payload: { provider: provider }
+      }));
+    }
+  };
+
   // localStorage.setItem をラップして検索履歴の変更をネイティブに通知
   if (!window.__localStorageWrapped) {
     window.__localStorageWrapped = true;

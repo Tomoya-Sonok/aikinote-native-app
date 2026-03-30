@@ -70,7 +70,8 @@ export default function RootLayout() {
   useEffect(() => {
     Promise.all([Linking.getInitialURL(), getSearchHistory()]).then(
       ([url, history]) => {
-        if (url) {
+        // auth/callback は OAuth フロー用（openAuthSessionAsync が処理）→ 無視
+        if (url && !url.includes("/auth/callback")) {
           setInitialUrl(toWebUrl(url));
         }
         setSearchHistoryJson(JSON.stringify(history));
@@ -82,7 +83,10 @@ export default function RootLayout() {
   // ウォームスタート: アプリ実行中のディープリンクを受け取る
   useEffect(() => {
     const subscription = Linking.addEventListener("url", (event) => {
-      setPendingDeepLink(toWebUrl(event.url));
+      // auth/callback は OAuth フロー用（openAuthSessionAsync が処理）→ 無視
+      if (!event.url.includes("/auth/callback")) {
+        setPendingDeepLink(toWebUrl(event.url));
+      }
     });
     return () => subscription.remove();
   }, []);

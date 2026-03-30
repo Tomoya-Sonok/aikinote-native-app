@@ -1,4 +1,5 @@
 import { useNetInfo } from "@react-native-community/netinfo";
+import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Platform, StyleSheet, View } from "react-native";
 import RevenueCatUI from "react-native-purchases-ui";
@@ -13,10 +14,12 @@ import { NativeHeader } from "@/components/header/native-header";
 import { SocialFeedNativeHeader } from "@/components/header/social-feed-header";
 import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikinoteWebView } from "@/components/webview/aikinote-webview";
+import { config } from "@/constants/config";
 import { useWebView } from "@/hooks/use-webview";
 import { getActiveTab, getHeaderType } from "@/lib/navigation/tab-utils";
 import { useRevenueCat } from "@/lib/purchases/RevenueCatProvider";
 import { saveSearchHistory } from "@/lib/storage/webview-storage";
+import { supabase } from "@/lib/supabase";
 
 export default function HomeScreen() {
   const {
@@ -131,6 +134,77 @@ export default function HomeScreen() {
     }
   }, []);
 
+  // OAuth フロー（Google / Apple 共通）
+  const handleNativeOAuth = useCallback(
+    async (provider: "google" | "apple") => {
+      try {
+        // 1. Supabase で OAuth URL を生成（PKCE code_verifier を AsyncStorage に保存）
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            skipBrowserRedirect: true,
+            redirectTo: "aikinotenativeapp://auth/callback",
+          },
+        });
+
+        if (error || !data?.url) {
+          console.error("[OAuth] URL 生成エラー:", error);
+          return;
+        }
+
+        // 2. システムブラウザで認証
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          "aikinotenativeapp://auth/callback",
+        );
+
+        if (result.type !== "success" || !result.url) {
+          // ユーザーがキャンセル等
+          return;
+        }
+
+        // 3. コールバック URL から code を抽出
+        const url = new URL(result.url);
+        const code = url.searchParams.get("code");
+        if (!code) {
+          console.error("[OAuth] コールバックに code がありません");
+          return;
+        }
+
+        // 4. code を session に交換（AsyncStorage の code_verifier を使用）
+        const { data: sessionData, error: sessionError } =
+          await supabase.auth.exchangeCodeForSession(code);
+
+        if (sessionError || !sessionData?.session) {
+          console.error("[OAuth] セッション交換エラー:", sessionError);
+          return;
+        }
+
+        const { access_token, refresh_token } = sessionData.session;
+
+        // 5. WebView 内の fetch で Cookie をセットし、認証済みページへ遷移
+        webView.executeScript(`
+          fetch('/api/auth/native-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              access_token: '${access_token}',
+              refresh_token: '${refresh_token}'
+            }),
+            credentials: 'include'
+          }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.success) location.replace('/personal/pages');
+          }).catch(function(e) {
+            console.error('Native session error:', e);
+          });
+        `);
+      } catch (error) {
+        console.error("[OAuth] エラー:", error);
+      }
+    },
+    [webView.executeScript],
+  );
+
   // WebView からのメッセージ受信
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
@@ -160,6 +234,12 @@ export default function HomeScreen() {
         } else if (data.type === "GET_SUBSCRIPTION_STATUS") {
           // WebView からサブスクリプション状態を問い合わせ
           sendToWebView("SUBSCRIPTION_STATUS", { isPremium });
+        } else if (
+          data.type === "START_NATIVE_OAUTH" &&
+          data.payload?.provider
+        ) {
+          // WebView から OAuth リクエスト（Google / Apple）
+          handleNativeOAuth(data.payload.provider);
         }
       } catch {
         // パースエラーは無視
@@ -171,6 +251,7 @@ export default function HomeScreen() {
       showCustomerCenter,
       sendToWebView,
       isPremium,
+      handleNativeOAuth,
     ],
   );
 
