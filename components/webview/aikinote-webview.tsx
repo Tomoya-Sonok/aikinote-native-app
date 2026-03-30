@@ -88,23 +88,38 @@ const INJECTED_JS_AFTER_LOAD = `
   }
   updateCSS();
 
-  // ユーザー情報を DOM から抽出してネイティブに送信
+  // ユーザー情報を取得してネイティブに送信
   function extractUserInfo() {
     if (!window.ReactNativeWebView) return;
     try {
+      // アバターは DOM から取得
       var avatarImg = document.querySelector('button[aria-label*="プロフィール"] img');
       var avatarUrl = avatarImg ? avatarImg.getAttribute('src') : null;
-      var profileAnchor = document.querySelector('a[href*="/social/profile/"]');
-      var userId = null;
-      if (profileAnchor) {
-        var href = profileAnchor.getAttribute('href');
-        var match = href ? href.match(/\\/social\\/profile\\/([^/?]+)/) : null;
-        if (match) userId = match[1];
-      }
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'USER_INFO',
-        payload: { profileImageUrl: avatarUrl, userId: userId }
-      }));
+
+      // userId は API から取得（DOM に依存しない）
+      fetch('/api/auth/token', { method: 'POST', credentials: 'include' })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+          if (!data || !data.token || !window.ReactNativeWebView) return;
+          try {
+            // JWT の payload を decode（base64url → JSON）
+            var parts = data.token.split('.');
+            if (parts.length < 2) return;
+            var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+            var userId = payload.userId || null;
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'USER_INFO',
+              payload: { profileImageUrl: avatarUrl, userId: userId }
+            }));
+          } catch(e) {}
+        })
+        .catch(function() {
+          // API 未認証時はアバターのみ送信
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'USER_INFO',
+            payload: { profileImageUrl: avatarUrl, userId: null }
+          }));
+        });
     } catch(e) {}
   }
   extractUserInfo();
