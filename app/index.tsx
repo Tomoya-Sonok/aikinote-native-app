@@ -262,8 +262,24 @@ export default function HomeScreen() {
           updateSearchHistoryJson(json);
           saveSearchHistory(data.payload);
         } else if (data.type === "USER_INFO" && data.payload) {
+          const newUserId = data.payload.userId ?? null;
           setProfileImageUrl(data.payload.profileImageUrl ?? null);
-          setUserId(data.payload.userId ?? null);
+          setUserId(newUserId);
+
+          // ログアウト検知（userId が null に変化）→ プッシュトークン削除
+          if (!newUserId && pushTokenRef.current) {
+            webView.executeScript(`
+              fetch('/api/push-tokens', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expo_push_token: '${pushTokenRef.current}' }),
+                credentials: 'include'
+              }).catch(function(e) {});
+            `);
+            pushTokenRef.current = null;
+            pushTokenRegisteredRef.current = false;
+            identifiedRef.current = false;
+          }
         } else if (data.type === "INITIATE_IAP") {
           // WebView 内で Premium 機能がリクエストされた → Paywall を表示
           showPaywall().then((purchased) => {
@@ -284,23 +300,6 @@ export default function HomeScreen() {
         ) {
           // WebView から OAuth リクエスト（Google / Apple）
           handleNativeOAuth(data.payload.provider);
-        } else if (data.type === "USER_LOGGED_OUT") {
-          // ログアウト検知 → プッシュトークン削除 + 状態リセット
-          if (pushTokenRef.current) {
-            webView.executeScript(`
-              fetch('/api/push-tokens', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ expo_push_token: '${pushTokenRef.current}' }),
-                credentials: 'include'
-              }).catch(function(e) {});
-            `);
-            pushTokenRef.current = null;
-            pushTokenRegisteredRef.current = false;
-          }
-          identifiedRef.current = false;
-          setUserId(null);
-          setProfileImageUrl(null);
         }
       } catch {
         // パースエラーは無視
