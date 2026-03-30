@@ -29,6 +29,8 @@ export default function HomeScreen() {
     clearPendingDeepLink,
     searchHistoryJson,
     updateSearchHistoryJson,
+    pendingAuthCode,
+    setPendingAuthCode,
   } = useAppContext();
   const webView = useWebView(initialUrl);
   const netInfo = useNetInfo();
@@ -42,6 +44,7 @@ export default function HomeScreen() {
   const identifiedRef = useRef(false);
   const pushTokenRegisteredRef = useRef(false);
   const pushTokenRef = useRef<string | null>(null);
+  const authProcessingRef = useRef(false);
 
   // Android: 戻るボタンで WebView 内の履歴を戻る
   useEffect(() => {
@@ -136,65 +139,22 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // OAuth フロー（Google / Apple 共通）
-  const handleNativeOAuth = useCallback(
-    async (provider: "google" | "apple") => {
+  // OAuth: code → セッション交換 → WebView にセッション注入（共通処理）
+  const processOAuthCode = useCallback(
+    async (code: string) => {
+      if (authProcessingRef.current) return;
+      authProcessingRef.current = true;
       try {
-        // 1. Supabase で OAuth URL を生成（PKCE code_verifier を AsyncStorage に保存）
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider,
-          options: {
-            skipBrowserRedirect: true,
-            redirectTo: "aikinotenativeapp://auth/callback",
-          },
-        });
+        const { data: sessionData, error: sessionError } =
+          await supabase.auth.exchangeCodeForSession(code);
 
-        if (error || !data?.url) {
-          console.error("[OAuth] URL 生成エラー:", error);
+        if (sessionError || !sessionData?.session) {
+          console.error("[OAuth] セッション交換エラー:", sessionError);
           return;
         }
 
-        // 2. システムブラウザで認証
-        const result = await WebBrowser.openAuthSessionAsync(
-          data.url,
-          "aikinotenativeapp://auth/callback",
-        );
+        const { access_token, refresh_token } = sessionData.session;
 
-        if (result.type !== "success" || !result.url) {
-          // ユーザーがキャンセル等
-          return;
-        }
-
-        // 3. コールバック URL からトークンを取得
-        const url = new URL(result.url);
-        let access_token: string | null = null;
-        let refresh_token: string | null = null;
-
-        const code = url.searchParams.get("code");
-        if (code) {
-          // PKCE flow: code を session に交換
-          const { data: sessionData, error: sessionError } =
-            await supabase.auth.exchangeCodeForSession(code);
-
-          if (sessionError || !sessionData?.session) {
-            console.error("[OAuth] セッション交換エラー:", sessionError);
-            return;
-          }
-          access_token = sessionData.session.access_token;
-          refresh_token = sessionData.session.refresh_token;
-        } else {
-          // Implicit flow フォールバック: ハッシュフラグメントからトークンを取得
-          const hashParams = new URLSearchParams(url.hash.substring(1));
-          access_token = hashParams.get("access_token");
-          refresh_token = hashParams.get("refresh_token");
-        }
-
-        if (!access_token || !refresh_token) {
-          console.error("[OAuth] トークンを取得できませんでした");
-          return;
-        }
-
-        // 5. WebView 内の fetch で Cookie をセットし、認証済みページへ遷移
         webView.executeScript(`
           fetch('/api/auth/native-session', {
             method: 'POST',
@@ -212,9 +172,81 @@ export default function HomeScreen() {
         `);
       } catch (error) {
         console.error("[OAuth] エラー:", error);
+      } finally {
+        authProcessingRef.current = false;
       }
     },
     [webView.executeScript],
+  );
+
+  // Android: callback.tsx 経由で受け取った code を処理
+  useEffect(() => {
+    if (pendingAuthCode) {
+      processOAuthCode(pendingAuthCode);
+      setPendingAuthCode(null);
+    }
+  }, [pendingAuthCode, processOAuthCode, setPendingAuthCode]);
+
+  // OAuth フロー開始（Google / Apple 共通）
+  const handleNativeOAuth = useCallback(
+    async (provider: "google" | "apple") => {
+      try {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            skipBrowserRedirect: true,
+            redirectTo: "aikinotenativeapp://auth/callback",
+          },
+        });
+
+        if (error || !data?.url) {
+          console.error("[OAuth] URL 生成エラー:", error);
+          return;
+        }
+
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          "aikinotenativeapp://auth/callback",
+        );
+
+        // iOS: openAuthSessionAsync が URL をキャプチャ → ここで処理
+        // Android: Expo Router が先にキャプチャ → callback.tsx → pendingAuthCode 経由で処理
+        if (result.type === "success" && result.url) {
+          const url = new URL(result.url);
+          const code = url.searchParams.get("code");
+
+          if (code) {
+            await processOAuthCode(code);
+          } else {
+            // Implicit flow フォールバック
+            const hashParams = new URLSearchParams(url.hash.substring(1));
+            const access_token = hashParams.get("access_token");
+            const refresh_token = hashParams.get("refresh_token");
+
+            if (access_token && refresh_token) {
+              webView.executeScript(`
+                fetch('/api/auth/native-session', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    access_token: '${access_token}',
+                    refresh_token: '${refresh_token}'
+                  }),
+                  credentials: 'include'
+                }).then(function(r) { return r.json(); }).then(function(data) {
+                  if (data.success) location.replace('/personal/pages');
+                }).catch(function(e) {
+                  console.error('Native session error:', e);
+                });
+              `);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("[OAuth] エラー:", error);
+      }
+    },
+    [webView.executeScript, processOAuthCode],
   );
 
   // WebView からのメッセージ受信

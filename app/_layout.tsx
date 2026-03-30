@@ -47,6 +47,8 @@ type AppContextValue = {
   clearPendingDeepLink: () => void;
   searchHistoryJson: string;
   updateSearchHistoryJson: (json: string) => void;
+  pendingAuthCode: string | null;
+  setPendingAuthCode: (code: string | null) => void;
 };
 
 const AppContext = createContext<AppContextValue>({
@@ -56,6 +58,8 @@ const AppContext = createContext<AppContextValue>({
   clearPendingDeepLink: () => {},
   searchHistoryJson: "[]",
   updateSearchHistoryJson: () => {},
+  pendingAuthCode: null,
+  setPendingAuthCode: () => {},
 });
 
 export function useAppContext() {
@@ -70,6 +74,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [initialUrl, setInitialUrl] = useState(config.webBaseUrl);
   const [pendingDeepLink, setPendingDeepLink] = useState<string | null>(null);
+  const [pendingAuthCode, setPendingAuthCode] = useState<string | null>(null);
   const [searchHistoryJson, setSearchHistoryJson] = useState("[]");
   const [isReady, setIsReady] = useState(false);
   const splashHidden = useRef(false);
@@ -159,6 +164,8 @@ export default function RootLayout() {
       clearPendingDeepLink,
       searchHistoryJson,
       updateSearchHistoryJson,
+      pendingAuthCode,
+      setPendingAuthCode,
     }),
     [
       initialUrl,
@@ -167,6 +174,7 @@ export default function RootLayout() {
       clearPendingDeepLink,
       searchHistoryJson,
       updateSearchHistoryJson,
+      pendingAuthCode,
     ],
   );
 
