@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 // RevenueCat API キー
 // iOS / Android で別キーが必要になる場合はここで分岐
 const API_KEYS = {
-  apple: "test_tjJaYBcErDKfzlNibAjmERpeBqk",
+  apple: "appl_XFrZrlRRubAZpHqvWFdICmCrDvh",
   google: "test_tjJaYBcErDKfzlNibAjmERpeBqk",
 } as const;
 
