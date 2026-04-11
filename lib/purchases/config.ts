@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 // iOS / Android で別キーが必要になる場合はここで分岐
 const API_KEYS = {
   apple: "appl_XFrZrlRRubAZpHqvWFdICmCrDvh",
-  google: "test_tjJaYBcErDKfzlNibAjmERpeBqk",
+  google: "goog_NJnwKkUcXlHycFaTHDxSohBFskM",
 } as const;
 
 export const REVENUECAT_API_KEY =
