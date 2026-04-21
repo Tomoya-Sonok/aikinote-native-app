@@ -116,14 +116,35 @@ adb install -r aikinote-dev.apk
 
 ### 4. 開発サーバー起動 & アプリ起動
 
+Android 実機から Mac のローカル開発サーバーに接続する場合、**`adb reverse` でポート転送する方式を推奨**（Mac の LAN IP 直接指定は Next.js dev サーバーの hydration が完了しない既知問題があるため非推奨）。
+
 ```bash
-# Mac と Android 端末が同じ Wi-Fi に接続されている状態で
-pnpm start:prod   # 本番（aikinote.com）に接続 ← 実機はこちらを使用
+# 1) Web 側の Next.js dev サーバー用ポートを Android の localhost に転送
+adb reverse tcp:3000 tcp:3000
+
+# 2) Web 側を起動（別ターミナル）
+cd /path/to/aikinote && pnpm dev
+
+# 3) ネイティブ側を localhost 指定で起動
+cd /path/to/aikinote-native-app
+EXPO_PUBLIC_WEB_URL=http://localhost:3000 pnpm start
 ```
 
-Android 端末上の **AikiNote** アイコンをタップしてアプリを起動。
+Android 端末上の **AikiNote** アイコンをタップしてアプリを起動 → WebView が `http://localhost:3000` をロードし、Mac の dev サーバーに接続される。
 
-> **注意**: `pnpm start`（localhost 接続）は Android 実機では使えません（`10.0.2.2` はエミュレーター専用の特殊アドレスです）。実機でローカル開発サーバーに接続したい場合は下記「開発サーバーの使い分け」を参照してください。
+> **Tips**: Metro バンドラー用のポート 8081 は Expo CLI が `pnpm start` 実行時に自動で reverse するので手動操作は不要。
+
+本番環境で動作確認する場合は:
+
+```bash
+pnpm start:prod   # https://aikinote.com に接続
+```
+
+> **注意**: 素の `pnpm start`（`10.0.2.2` を使用）は Android **エミュレーター** 専用。実機では `adb reverse` + `EXPO_PUBLIC_WEB_URL=http://localhost:3000` を使うこと。
+
+### なぜ LAN IP 直接指定（`EXPO_PUBLIC_WEB_URL=http://<Mac IP>:3000`）ではダメなのか
+
+Next.js 16 の dev サーバーは Origin が異なるクライアントからの HMR WebSocket 接続を拒否する（`ws://<hostname>:3000/_next/...` が `net::ERR_INVALID_HTTP_RESPONSE` で失敗）。WebSocket が失敗すると dev runtime 初期化も詰まり、**React hydration が完了せずボタンが一切反応しなくなる**。`adb reverse` 方式ならクライアント側の Origin が `localhost:3000` になるのでこの問題を回避できる。
 
 ## ローカルビルドの前提ツール（iOS）
 
@@ -145,15 +166,16 @@ WebView の接続先は開発サーバーの起動コマンドで決まる。
 
 | コマンド | 接続先 | 用途 |
 |---|---|---|
-| `pnpm start` | `localhost:3000`（iOS）/ `10.0.2.2:3000`（Android） | **シミュレーター / エミュレーター** でのローカル開発 |
-| `pnpm start:prod` | `https://aikinote.com` | **実機テスト** や本番環境での動作確認 |
-| `EXPO_PUBLIC_WEB_URL=http://<Mac IP>:3000 pnpm start` | Mac のローカル IP | **実機 + ローカル開発サーバー**（Web 版の未リリース変更を実機で確認したい時） |
+| `pnpm start` | `localhost:3000`（iOS）/ `10.0.2.2:3000`（Android） | **iOS Simulator / Android Emulator** でのローカル開発 |
+| `pnpm start:prod` | `https://aikinote.com` | **本番環境** で動作確認したいとき（実機・シミュレーター共通） |
+| `adb reverse tcp:3000 tcp:3000` + `EXPO_PUBLIC_WEB_URL=http://localhost:3000 pnpm start` | Android 実機 → Mac の `localhost:3000` | **Android 実機 + ローカル開発サーバー**（Web 版の未リリース変更を実機で確認したいとき）|
+| `EXPO_PUBLIC_WEB_URL=http://<Mac IP>:3000 pnpm start` | Mac の LAN IP | ⚠️ Next.js dev サーバーの hydration 問題で現在非推奨。上記 `adb reverse` 方式を使うこと |
 
-### なぜ `pnpm start` は実機で動かないのか
+### なぜ素の `pnpm start` は実機で動かないのか
 
-- `localhost` / `10.0.2.2` はシミュレーター/エミュレーター内からホスト Mac を指す特殊アドレス
+- `localhost` / `10.0.2.2` はシミュレーター / エミュレーター内からホスト Mac を指す特殊アドレス
 - 実機はネットワーク上の別デバイスなので、これらのアドレスでは Mac に到達できない
-- 実機からローカルサーバーに接続するには Mac の実際の IP アドレス（`ipconfig getifaddr en0` で確認）を指定する必要がある
+- Android 実機では `adb reverse tcp:3000 tcp:3000` で Android の `localhost:3000` を Mac の `localhost:3000` にトンネルしてから `EXPO_PUBLIC_WEB_URL=http://localhost:3000` を指定する
 
 ## トラブルシューティング
 
@@ -167,7 +189,13 @@ xcrun simctl listapps booted | grep aikinote
 ### 実機で画面が真っ白になる
 
 - `pnpm start` ではなく **`pnpm start:prod`** を使っているか確認（上記「開発サーバーの使い分け」参照）
-- ローカルサーバーに実機から接続したい場合は `EXPO_PUBLIC_WEB_URL=http://<Mac IP>:3000 pnpm start` を使用
+- Android 実機でローカル開発サーバーに繋ぐときは `adb reverse tcp:3000 tcp:3000` + `EXPO_PUBLIC_WEB_URL=http://localhost:3000 pnpm start` を使うこと（LAN IP 直接指定は hydration 問題で非推奨）
+
+### Android 実機でページは表示されるがボタンが一切反応しない
+
+Next.js 16 の dev サーバーに **LAN IP 経由** でアクセスすると、HMR WebSocket の handshake が拒否されて React hydration が完了しない。DOM 上にボタンは存在するが `__reactFiber` が attach されず、タップ・programmatic click いずれも無反応になる。
+
+対処: LAN IP 指定をやめて `adb reverse` 方式に切り替える（上記「Android 実機での動作確認 § 4」参照）。本番環境 (`pnpm start:prod`) では発生しない。
 
 ### 開発サーバーに接続できない
 

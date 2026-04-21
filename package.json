@@ -11,9 +11,9 @@
     "check": "biome check .",
     "check:fix": "biome check . --write",
     "typecheck": "tsc --noEmit",
-    "build:dev": "eas build --profile development --platform all",
-    "build:preview": "eas build --profile preview --platform all",
-    "build:prod": "eas build --profile production --platform all",
+    "build:dev": "EXPO_NO_CAPABILITY_SYNC=1 eas build --profile development --platform all",
+    "build:preview": "EXPO_NO_CAPABILITY_SYNC=1 eas build --profile preview --platform all",
+    "build:prod": "EXPO_NO_CAPABILITY_SYNC=1 eas build --profile production --platform all",
     "submit": "eas submit --platform all",
     "prepare": "husky"
   },

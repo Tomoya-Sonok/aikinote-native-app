@@ -28,9 +28,13 @@ function buildNativeAppCSS() {
   var type = getHeaderType();
   var css = [];
 
-  // タブナビゲーション: 常に非表示
-  css.push('[data-testid="tab-navigation"], div[class*="tabContainer"] { display: none !important; }');
+  // タブナビゲーション: 常に非表示（TabNavigation 本体 + 各 Layout のラッパー div を含む）
+  css.push('[data-testid="tab-navigation"], div[class*="tabContainer"], div[class*="tabNavigation"] { display: none !important; }');
   css.push('main { padding-bottom: 0 !important; }');
+
+  // FAB の下端位置: Web 版は TabNavigation 分 (約 82px) を確保しているが、
+  // ネイティブアプリは TabNavigation を非表示にしているため下方の余白を詰める。
+  css.push(':root { --fab-bottom: 18px; --fab-bottom-large: 43px; }');
 
   if (type === 'default') {
     // DefaultHeader ページ: visibility hidden で縮小（NavigationDrawer + プロフィールカードは残す）
@@ -134,15 +138,19 @@ const INJECTED_JS_AFTER_LOAD = `
       window.dispatchEvent(new CustomEvent('aikinote:premiumChanged', { detail: { isPremium: isPremium } }));
     };
 
-    // Paywall を表示して結果を返す
-    window.showNativePaywall = function() {
+    // 指定プランを直接購入して結果を返す（planType: "monthly" | "yearly"）
+    window.showNativePaywall = function(options) {
       return new Promise(function(resolve) {
         if (!window.ReactNativeWebView) {
           resolve({ success: false, isPremium: false });
           return;
         }
         window.__iapResolve = resolve;
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'INITIATE_IAP' }));
+        var planType = options && options.planType ? options.planType : undefined;
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'INITIATE_IAP',
+          payload: { planType: planType }
+        }));
         // 60秒タイムアウト
         setTimeout(function() {
           if (window.__iapResolve) {

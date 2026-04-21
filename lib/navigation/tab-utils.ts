@@ -43,14 +43,37 @@ function normalizePathname(url: string): string | null {
 
 /**
  * URL からアクティブなタブを判定する。
+ *
+ * Web 版で `TabNavigation` を表示するページのみでタブバーを出す。
+ * Web 版の表示条件（DefaultLayout / SocialLayout の showTabNavigation=true）に対応するページだけ
+ * タブ ID を返し、それ以外（詳細・編集・設定・通知・プロフィール・作成フォーム・検索結果等）は null を返す。
+ *
+ * Web 版で TabNavigation を表示するページ:
+ * - `/personal/pages`（一覧）
+ * - `/personal/pages/[id]`（詳細表示、/new と /edit は除く）
+ * - `/mypage`
+ * - `/social/posts`（フィード）
  */
 export function getActiveTab(url: string): TabId | null {
   const normalized = normalizePathname(url);
   if (!normalized) return null;
 
-  if (normalized.startsWith("/personal")) return "personal";
-  if (normalized.startsWith("/social")) return "social";
-  if (normalized.startsWith("/mypage")) return "mypage";
+  // /personal/pages 一覧
+  if (/^\/personal\/pages\/?(\?.*)?$/.test(normalized)) return "personal";
+  // /personal/pages/[id] 詳細（/new, /edit は除外）
+  if (
+    /^\/personal\/pages\/[^/]+\/?(\?.*)?$/.test(normalized) &&
+    !normalized.startsWith("/personal/pages/new")
+  ) {
+    return "personal";
+  }
+
+  // /mypage 完全一致
+  if (/^\/mypage\/?(\?.*)?$/.test(normalized)) return "mypage";
+
+  // /social/posts フィード
+  if (/^\/social\/posts\/?(\?.*)?$/.test(normalized)) return "social";
+
   return null;
 }
 

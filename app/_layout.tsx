@@ -51,8 +51,13 @@ type AppContextValue = {
   setPendingAuthCode: (code: string | null) => void;
 };
 
+// ネイティブアプリはランディングページではなく /login を起点にする。
+// 認証済みユーザーは Web 版 /login 側で /personal/pages にサーバーリダイレクトされるので、
+// 未認証ユーザーのみが実際にログイン画面を見る。
+const NATIVE_INITIAL_URL = `${config.webBaseUrl}/login`;
+
 const AppContext = createContext<AppContextValue>({
-  initialUrl: config.webBaseUrl,
+  initialUrl: NATIVE_INITIAL_URL,
   onWebViewReady: () => {},
   pendingDeepLink: null,
   clearPendingDeepLink: () => {},
@@ -72,7 +77,7 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const [initialUrl, setInitialUrl] = useState(config.webBaseUrl);
+  const [initialUrl, setInitialUrl] = useState(NATIVE_INITIAL_URL);
   const [pendingDeepLink, setPendingDeepLink] = useState<string | null>(null);
   const [pendingAuthCode, setPendingAuthCode] = useState<string | null>(null);
   const [searchHistoryJson, setSearchHistoryJson] = useState("[]");

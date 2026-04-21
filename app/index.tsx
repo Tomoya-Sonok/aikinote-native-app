@@ -2,6 +2,7 @@ import { useNetInfo } from "@react-native-community/netinfo";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Platform, StyleSheet, View } from "react-native";
+import { PACKAGE_TYPE } from "react-native-purchases";
 import RevenueCatUI from "react-native-purchases-ui";
 import {
   SafeAreaView,
@@ -40,7 +41,9 @@ export default function HomeScreen() {
   const headerType = getHeaderType(webView.displayUrl);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const { identify, isPremium } = useRevenueCat();
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [isTutorialActive, setIsTutorialActive] = useState(false);
+  const { identify, isPremium, offerings, purchasePackage } = useRevenueCat();
   const identifiedRef = useRef(false);
   const pushTokenRegisteredRef = useRef(false);
   const pushTokenRef = useRef<string | null>(null);
@@ -119,7 +122,29 @@ export default function HomeScreen() {
     [webView.executeScript],
   );
 
-  // Paywall を表示
+  // planType に応じたパッケージを直接購入（Paywall UI はスキップし OS 標準の購入ダイアログのみ表示）
+  const purchaseByPlanType = useCallback(
+    async (planType: "monthly" | "yearly"): Promise<boolean> => {
+      const current = offerings?.current;
+      if (!current) {
+        console.error("[Purchase] offerings.current が取得できていない");
+        return false;
+      }
+      const targetType =
+        planType === "yearly" ? PACKAGE_TYPE.ANNUAL : PACKAGE_TYPE.MONTHLY;
+      const pkg = current.availablePackages.find(
+        (p) => p.packageType === targetType,
+      );
+      if (!pkg) {
+        console.error(`[Purchase] ${planType} パッケージが見つからない`);
+        return false;
+      }
+      return purchasePackage(pkg);
+    },
+    [offerings, purchasePackage],
+  );
+
+  // Paywall フォールバック（planType が渡されなかった場合に備えて残す）
   const showPaywall = useCallback(async (): Promise<boolean> => {
     try {
       const result = await RevenueCatUI.presentPaywall();
@@ -280,9 +305,27 @@ export default function HomeScreen() {
             pushTokenRegisteredRef.current = false;
             identifiedRef.current = false;
           }
+        } else if (
+          data.type === "UNREAD_NOTIFICATION_COUNT" &&
+          data.payload &&
+          typeof data.payload.count === "number"
+        ) {
+          setUnreadNotificationCount(data.payload.count);
+        } else if (
+          data.type === "TUTORIAL_STATE" &&
+          data.payload &&
+          typeof data.payload.active === "boolean"
+        ) {
+          setIsTutorialActive(data.payload.active);
         } else if (data.type === "INITIATE_IAP") {
-          // WebView 内で Premium 機能がリクエストされた → Paywall を表示
-          showPaywall().then((purchased) => {
+          // WebView から購入リクエスト: planType が指定されていれば該当パッケージを直接購入、
+          // なければ Paywall にフォールバック
+          const planType = data.payload?.planType;
+          const purchasePromise =
+            planType === "monthly" || planType === "yearly"
+              ? purchaseByPlanType(planType)
+              : showPaywall();
+          purchasePromise.then((purchased) => {
             sendToWebView("IAP_RESULT", {
               success: purchased,
               isPremium: purchased,
@@ -307,6 +350,7 @@ export default function HomeScreen() {
     },
     [
       updateSearchHistoryJson,
+      purchaseByPlanType,
       showPaywall,
       showCustomerCenter,
       sendToWebView,
@@ -365,6 +409,11 @@ export default function HomeScreen() {
     }
   }, [webView.navigateInWebView, userId]);
 
+  // SocialFeedHeader: 通知アイコンタップ
+  const handleNotificationPress = useCallback(() => {
+    webView.navigateInWebView("/social/notifications");
+  }, [webView.navigateInWebView]);
+
   // SocialFeedHeader: 検索アイコンタップ
   const handleSearchPress = useCallback(() => {
     webView.navigateInWebView("/social/posts/search");
@@ -378,9 +427,12 @@ export default function HomeScreen() {
     );
   }
 
+  const showHeader = !isTutorialActive;
+  const showTabBar = !isTutorialActive;
+
   return (
     <View style={styles.container}>
-      {headerType === "default" && (
+      {showHeader && headerType === "default" && (
         <NativeHeader
           profileImageUrl={profileImageUrl}
           onLogoPress={handleLogoPress}
@@ -388,17 +440,21 @@ export default function HomeScreen() {
           onMenuPress={handleMenuPress}
         />
       )}
-      {headerType === "social-feed" && (
+      {showHeader && headerType === "social-feed" && (
         <SocialFeedNativeHeader
           profileImageUrl={profileImageUrl}
+          unreadNotificationCount={unreadNotificationCount}
           onProfilePress={handleProfilePress}
+          onNotificationPress={handleNotificationPress}
           onSearchPress={handleSearchPress}
         />
       )}
       <View
         style={[
           styles.webviewArea,
-          headerType === "web" && { paddingTop: insets.top },
+          (isTutorialActive || headerType === "web") && {
+            paddingTop: insets.top,
+          },
         ]}
       >
         <AikinoteWebView
@@ -411,7 +467,9 @@ export default function HomeScreen() {
           onNavigationStateChange={handleNavigationStateChange}
         />
       </View>
-      <NativeTabBar activeTab={activeTab} onTabPress={handleTabPress} />
+      {showTabBar && (
+        <NativeTabBar activeTab={activeTab} onTabPress={handleTabPress} />
+      )}
     </View>
   );
 }
