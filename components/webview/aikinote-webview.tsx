@@ -130,6 +130,10 @@ const INJECTED_JS_AFTER_LOAD = `
         window.__statusResolve(msg.payload);
         window.__statusResolve = null;
       }
+      if (msg.type === 'OAUTH_RESULT' && window.__oauthResolve) {
+        window.__oauthResolve(msg.payload);
+        window.__oauthResolve = null;
+      }
     };
 
     // Premium 状態変更のコールバック
@@ -187,14 +191,26 @@ const INJECTED_JS_AFTER_LOAD = `
     };
   }
 
-  // OAuth ブリッジ（Google / Apple 共通）
+  // OAuth ブリッジ（Google / Apple 共通）: 結果を Promise で返す
   window.startNativeOAuth = function(provider) {
-    if (window.ReactNativeWebView) {
+    return new Promise(function(resolve) {
+      if (!window.ReactNativeWebView) {
+        resolve({ success: false, reason: 'no_bridge' });
+        return;
+      }
+      window.__oauthResolve = resolve;
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'START_NATIVE_OAUTH',
         payload: { provider: provider }
       }));
-    }
+      // 120秒タイムアウト（OAuth 操作は長めに許容）
+      setTimeout(function() {
+        if (window.__oauthResolve) {
+          window.__oauthResolve({ success: false, reason: 'timeout' });
+          window.__oauthResolve = null;
+        }
+      }, 120000);
+    });
   };
 
   // localStorage.setItem をラップして検索履歴の変更をネイティブに通知

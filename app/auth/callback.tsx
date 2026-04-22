@@ -14,15 +14,16 @@ import { useAppContext } from "@/app/_layout";
 WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthCallbackRoute() {
-  const { code } = useLocalSearchParams<{ code: string }>();
+  const params = useLocalSearchParams<{ code?: string; error?: string }>();
   const { setPendingAuthCode } = useAppContext();
 
   useEffect(() => {
-    if (code) {
-      setPendingAuthCode(code);
+    console.log("[OAuth] callback route reached, params:", params);
+    if (params.code) {
+      setPendingAuthCode(params.code);
     }
     router.back();
-  }, [code, setPendingAuthCode]);
+  }, [params, setPendingAuthCode]);
 
   return null;
 }

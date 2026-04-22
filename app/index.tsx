@@ -175,11 +175,18 @@ export default function HomeScreen() {
 
         if (sessionError || !sessionData?.session) {
           console.error("[OAuth] セッション交換エラー:", sessionError);
+          sendToWebView("OAUTH_RESULT", {
+            success: false,
+            reason: "exchange_failed",
+            message: sessionError?.message,
+          });
           return;
         }
 
         const { access_token, refresh_token } = sessionData.session;
 
+        // WebView 側で native-session エンドポイントに POST、成功なら /personal/pages に遷移
+        // 結果も __onNativeMessage("OAUTH_RESULT") 相当に resolve させる
         webView.executeScript(`
           fetch('/api/auth/native-session', {
             method: 'POST',
@@ -190,18 +197,38 @@ export default function HomeScreen() {
             }),
             credentials: 'include'
           }).then(function(r) { return r.json(); }).then(function(data) {
-            if (data.success) location.replace('/personal/pages');
+            if (data.success) {
+              if (window.__oauthResolve) {
+                window.__oauthResolve({ success: true });
+                window.__oauthResolve = null;
+              }
+              location.replace('/personal/pages');
+            } else {
+              if (window.__oauthResolve) {
+                window.__oauthResolve({ success: false, reason: 'session_api_failed' });
+                window.__oauthResolve = null;
+              }
+            }
           }).catch(function(e) {
             console.error('Native session error:', e);
+            if (window.__oauthResolve) {
+              window.__oauthResolve({ success: false, reason: 'network_error' });
+              window.__oauthResolve = null;
+            }
           });
         `);
       } catch (error) {
         console.error("[OAuth] エラー:", error);
+        sendToWebView("OAUTH_RESULT", {
+          success: false,
+          reason: "unknown",
+          message: error instanceof Error ? error.message : undefined,
+        });
       } finally {
         authProcessingRef.current = false;
       }
     },
-    [webView.executeScript],
+    [webView.executeScript, sendToWebView],
   );
 
   // Android: callback.tsx 経由で受け取った code を処理
@@ -226,13 +253,22 @@ export default function HomeScreen() {
 
         if (error || !data?.url) {
           console.error("[OAuth] URL 生成エラー:", error);
+          sendToWebView("OAUTH_RESULT", {
+            success: false,
+            reason: "url_generation_failed",
+            message: error?.message,
+          });
           return;
         }
+
+        console.log("[OAuth] authorize url:", data.url);
 
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
           "aikinotenativeapp://auth/callback",
         );
+
+        console.log("[OAuth] result:", result.type, (result as { url?: string }).url);
 
         // iOS: openAuthSessionAsync が URL をキャプチャ → ここで処理
         // Android: Expo Router が先にキャプチャ → callback.tsx → pendingAuthCode 経由で処理
@@ -242,36 +278,75 @@ export default function HomeScreen() {
 
           if (code) {
             await processOAuthCode(code);
-          } else {
-            // Implicit flow フォールバック
-            const hashParams = new URLSearchParams(url.hash.substring(1));
-            const access_token = hashParams.get("access_token");
-            const refresh_token = hashParams.get("refresh_token");
-
-            if (access_token && refresh_token) {
-              webView.executeScript(`
-                fetch('/api/auth/native-session', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    access_token: '${access_token}',
-                    refresh_token: '${refresh_token}'
-                  }),
-                  credentials: 'include'
-                }).then(function(r) { return r.json(); }).then(function(data) {
-                  if (data.success) location.replace('/personal/pages');
-                }).catch(function(e) {
-                  console.error('Native session error:', e);
-                });
-              `);
-            }
+            return;
           }
+
+          // Implicit flow フォールバック
+          const hashParams = new URLSearchParams(url.hash.substring(1));
+          const access_token = hashParams.get("access_token");
+          const refresh_token = hashParams.get("refresh_token");
+
+          if (access_token && refresh_token) {
+            webView.executeScript(`
+              fetch('/api/auth/native-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  access_token: '${access_token}',
+                  refresh_token: '${refresh_token}'
+                }),
+                credentials: 'include'
+              }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.success) {
+                  if (window.__oauthResolve) {
+                    window.__oauthResolve({ success: true });
+                    window.__oauthResolve = null;
+                  }
+                  location.replace('/personal/pages');
+                } else {
+                  if (window.__oauthResolve) {
+                    window.__oauthResolve({ success: false, reason: 'session_api_failed' });
+                    window.__oauthResolve = null;
+                  }
+                }
+              }).catch(function(e) {
+                console.error('Native session error:', e);
+                if (window.__oauthResolve) {
+                  window.__oauthResolve({ success: false, reason: 'network_error' });
+                  window.__oauthResolve = null;
+                }
+              });
+            `);
+            return;
+          }
+
+          // success だが code も access_token も無い
+          sendToWebView("OAUTH_RESULT", {
+            success: false,
+            reason: "no_code_or_token",
+          });
+          return;
+        }
+
+        // type !== "success" （cancel / dismiss / locked 等）
+        // iOS: openAuthSessionAsync が success を返さなければ本当に失敗
+        // Android: callback.tsx → pendingAuthCode 経由で後から成功する可能性があるため、ここでは送らない
+        if (Platform.OS === "ios") {
+          sendToWebView("OAUTH_RESULT", {
+            success: false,
+            reason: result.type,
+          });
         }
       } catch (error) {
         console.error("[OAuth] エラー:", error);
+        sendToWebView("OAUTH_RESULT", {
+          success: false,
+          reason: "exception",
+          message: error instanceof Error ? error.message : undefined,
+        });
       }
     },
-    [webView.executeScript, processOAuthCode],
+    [webView.executeScript, processOAuthCode, sendToWebView],
   );
 
   // WebView からのメッセージ受信
