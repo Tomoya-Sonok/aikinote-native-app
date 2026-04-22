@@ -13,14 +13,14 @@ const getBaseUrl = (): string => {
   const envUrl = process.env.EXPO_PUBLIC_WEB_URL;
   if (envUrl) return envUrl;
 
-  return __DEV__ ? getDevBaseUrl() : "https://aikinote.com";
+  return __DEV__ ? getDevBaseUrl() : "https://www.aikinote.com";
 };
 
 const getDomain = (url: string): string => {
   try {
     return new URL(url).hostname;
   } catch {
-    return "aikinote.com";
+    return "www.aikinote.com";
   }
 };
 

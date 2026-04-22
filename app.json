@@ -12,7 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.aikinote",
       "usesAppleSignIn": true,
-      "associatedDomains": ["applinks:aikinote.com"],
+      "associatedDomains": ["applinks:www.aikinote.com"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -35,12 +35,12 @@
           "data": [
             {
               "scheme": "https",
-              "host": "aikinote.com",
+              "host": "www.aikinote.com",
               "pathPattern": "/verify-email"
             },
             {
               "scheme": "https",
-              "host": "aikinote.com",
+              "host": "www.aikinote.com",
               "pathPattern": "/.*/verify-email"
             }
           ],
