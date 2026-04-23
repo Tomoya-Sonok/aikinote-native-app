@@ -197,7 +197,12 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
           </Stack>
-          <StatusBar style="auto" />
+          {/*
+            AikiNote のヘッダー背景は常に白系（#fdfcfa / #ffffff）。Android edge-to-edge 環境下では
+            style="auto" が時間/Wi-Fi/バッテリー等のステータスバーアイコンを白のまま描画して
+            背景と同化する事象があるため、"dark" を明示してアイコンを必ず黒色で表示する。
+          */}
+          <StatusBar style="dark" />
         </ThemeProvider>
       </AppContext.Provider>
     </RevenueCatProvider>
