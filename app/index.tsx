@@ -13,6 +13,7 @@ import { useAppContext } from "@/app/_layout";
 import { NetworkError } from "@/components/error/network-error";
 import { NativeHeader } from "@/components/header/native-header";
 import { SocialFeedNativeHeader } from "@/components/header/social-feed-header";
+import { OfflineBanner } from "@/components/offline/offline-banner";
 import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikinoteWebView } from "@/components/webview/aikinote-webview";
 import { useWebView } from "@/hooks/use-webview";
@@ -494,7 +495,10 @@ export default function HomeScreen() {
     webView.navigateInWebView("/social/posts/search");
   }, [webView.navigateInWebView]);
 
-  if (webView.hasError || isOffline) {
+  // 完全なエラー画面の条件:
+  // - WebView の HTTP/JS エラー（hasError）
+  // - オフライン かつ 一度もロードできていない（キャッシュ表示の希望なし）
+  if (webView.hasError || (isOffline && !webView.hasEverLoaded)) {
     return (
       <SafeAreaView style={styles.container}>
         <NetworkError isOffline={isOffline} onRetry={webView.reload} />
@@ -504,6 +508,8 @@ export default function HomeScreen() {
 
   const showHeader = !isTutorialActive;
   const showTabBar = !isTutorialActive;
+  // オフラインだが一度ロード済み → WebView をキャッシュ表示しバナーを出す
+  const showOfflineBanner = isOffline && webView.hasEverLoaded;
 
   return (
     <View style={styles.container}>
@@ -524,6 +530,7 @@ export default function HomeScreen() {
           onSearchPress={handleSearchPress}
         />
       )}
+      {showOfflineBanner && <OfflineBanner />}
       <View
         style={[
           styles.webviewArea,

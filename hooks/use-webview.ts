@@ -4,6 +4,7 @@ import type WebView from "react-native-webview";
 type WebViewState = {
   isLoading: boolean;
   hasError: boolean;
+  hasEverLoaded: boolean;
   canGoBack: boolean;
   sourceUrl: string;
   displayUrl: string;
@@ -14,13 +15,19 @@ export function useWebView(initialUrl: string) {
   const [state, setState] = useState<WebViewState>({
     isLoading: true,
     hasError: false,
+    hasEverLoaded: false,
     canGoBack: false,
     sourceUrl: initialUrl,
     displayUrl: initialUrl,
   });
 
   const setLoaded = useCallback(() => {
-    setState((prev) => ({ ...prev, isLoading: false, hasError: false }));
+    setState((prev) => ({
+      ...prev,
+      isLoading: false,
+      hasError: false,
+      hasEverLoaded: true,
+    }));
   }, []);
 
   const setError = useCallback(() => {
