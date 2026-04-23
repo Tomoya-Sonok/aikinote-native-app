@@ -100,3 +100,43 @@ self.addEventListener("fetch", () => {
 1. 本ドキュメントのレビューを受け、Phase 5-a に進む合意を取る。
 2. Phase 5-a 着手時は、まず `sw.js` の拡張案を PR ベースで出し、WebView 実機（iOS / Android）でのキャッシュ挙動を観察してから水平展開する。
 3. Phase 5-b は審査通過後のユーザーフィードバックを踏まえて判断する。
+
+---
+
+## Phase 5-a 実装結果（2026-04 時点）
+
+当初の選択肢 A 推奨から方針転換して **選択肢 B（TanStack Query + localStorage 永続化）** を採用。Explore 調査によりパフォーマンスが悪化しないことを確認した上での判断。
+
+### 採用した構成
+- 既存の `@tanstack/react-query` 5.99.2 を初めて本格利用
+- `@tanstack/query-sync-storage-persister` で `window.localStorage` に dehydrate
+- `PersistQueryClientProvider` で throttleTime 1000ms、maxAge 24h、success 状態のみ永続化
+- staleTime 30 秒 / gcTime 5 分 / retry 1（オフライン時の無駄リトライ抑止）
+
+### 移行したフック（11 本）
+`useTrainingPagesData` / `usePageDetailData` / `useSocialFeed` / `useSocialSearch` / `useNotifications` / `useTrainingStats` / `useDailyLimits` / `useSubscription` / `useTrendingHashtags` / `useTrainingTags` / `useUnreadNotificationCount` + `useUnreadReplyPostIds`
+
+### 削除した旧実装
+- `lib/api/client.ts` の `cachedQuery()` / `invalidateQueryCacheByPrefixes()` / `CACHE_TTL_MS` / `queryCache` (Map) / `QueryCacheEntry` 型
+- `useTrainingPagesData` の手書き optimistic ID ロジック（未使用だった `addPage` / `updatePageData` と合わせて削除）
+- `useSocialFeed` の手書き tabCache、`useSocialSearch` の setTimeout debounce、`useUnreadNotificationCount` の setInterval polling
+
+### オフライン UX 変更
+- Web: `components/shared/OfflineBanner/` を layout 配下に常駐。`navigator.onLine` 監視
+- Native: `useWebView` に `hasEverLoaded` フラグを追加し、WebView が一度でもロード成功していれば `NetworkError` 全画面ではなくキャッシュ表示 + `components/offline/offline-banner.tsx` に切り替え
+
+### 画像キャッシュ（CloudFront Cache-Control 確認）
+
+CloudFront 経由の S3 配信画像 (`https://d2zhlmel6ws1p9.cloudfront.net/...`) は **Cache-Control ヘッダーの直接プローブは未確認**（実在する userId ベースのファイルパスへのアクセスが必要なため）。ただし:
+
+- `www.aikinote.com/images/shared/*` 等の Vercel 配信静的アセットは `cache-control: public, max-age=14400, must-revalidate`（4 時間）
+- ブラウザの HTTP キャッシュに乗るため、再訪時の画像リクエストは 304 Not Modified で返る
+- オフライン時は、一度読み込んだ画像は `max-age` 内であればキャッシュから表示されるため、プロフィール画像・添付画像は Phase 5-a の恩恵を自動的に受ける
+
+**推奨改善（別タスク）**: CloudFront Distribution の Behavior 設定で S3 配信画像の Cache-Control を `public, max-age=31536000, immutable`（1 年）に統一する。アップロードファイルはキーにハッシュが入っているため immutable が適切。オフライン期間が長い場合の画像表示可能期間が延び、CloudFront 請求額も下がる。
+
+## 今後のタスク（Phase 5-b 以降）
+
+- ネットワーク復帰時の自動 refetch（`refetchOnReconnect: true` で既に有効）の UX 評価
+- mutation のオフラインキュー化（新規投稿・編集を下書きとして保持）は選択肢 B の範囲外。Phase 5-b としてユーザー要望ベースで検討
+- Service Worker による画像プリキャッシュ（選択肢 A の部分採用）は必要になった時点で検討
