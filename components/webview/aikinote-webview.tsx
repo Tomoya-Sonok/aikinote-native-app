@@ -34,7 +34,9 @@ function buildNativeAppCSS() {
 
   // FAB の下端位置: Web 版は TabNavigation 分 (約 82px) を確保しているが、
   // ネイティブアプリは TabNavigation を非表示にしているため下方の余白を詰める。
-  css.push(':root { --fab-bottom: 18px; --fab-bottom-large: 43px; }');
+  // !important が無いと、このスタイル注入の後に読み込まれる variables.css の
+  // :root { --fab-bottom: 100px } にカスケードで負けてしまうため必須。
+  css.push(':root { --fab-bottom: 18px !important; --fab-bottom-large: 43px !important; }');
 
   if (type === 'default') {
     // DefaultHeader ページ: visibility hidden で縮小（NavigationDrawer + プロフィールカードは残す）

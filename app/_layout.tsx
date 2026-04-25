@@ -4,7 +4,6 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import * as Linking from "expo-linking";
-import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -20,6 +19,7 @@ import {
 import { config } from "@/constants/config";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { toWebUrl } from "@/lib/deep-link";
+import { Notifications } from "@/lib/notifications";
 import { RevenueCatProvider } from "@/lib/purchases/RevenueCatProvider";
 import { setupNotificationChannel } from "@/lib/push-notifications";
 import { getSearchHistory } from "@/lib/storage/webview-storage";
@@ -30,7 +30,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 // フォアグラウンドでも通知バナーを表示
-Notifications.setNotificationHandler({
+Notifications?.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldShowBanner: true,
@@ -55,6 +55,16 @@ type AppContextValue = {
 // 認証済みユーザーは Web 版 /login 側で /personal/pages にサーバーリダイレクトされるので、
 // 未認証ユーザーのみが実際にログイン画面を見る。
 const NATIVE_INITIAL_URL = `${config.webBaseUrl}/login`;
+
+// Web 版に転送すべきでないディープリンクを判定する。
+// - /auth/callback: OAuth フロー（openAuthSessionAsync が処理）
+// - expo-development-client / expo-go: dev client が内部的に扱う Metro 接続用 URL
+function shouldHandleDeepLink(url: string): boolean {
+  if (url.includes("/auth/callback")) return false;
+  if (url.includes("expo-development-client")) return false;
+  if (url.includes("expo-go")) return false;
+  return true;
+}
 
 const AppContext = createContext<AppContextValue>({
   initialUrl: NATIVE_INITIAL_URL,
@@ -98,6 +108,8 @@ export default function RootLayout() {
 
   // 通知タップ → 該当投稿に遷移
   useEffect(() => {
+    if (!Notifications) return;
+
     // コールドスタート: アプリ起動のきっかけとなった通知を処理
     Notifications.getLastNotificationResponseAsync().then((response) => {
       const postId = response?.notification.request.content.data?.postId as
@@ -126,8 +138,7 @@ export default function RootLayout() {
   useEffect(() => {
     Promise.all([Linking.getInitialURL(), getSearchHistory()]).then(
       ([url, history]) => {
-        // auth/callback は OAuth フロー用（openAuthSessionAsync が処理）→ 無視
-        if (url && !url.includes("/auth/callback")) {
+        if (url && shouldHandleDeepLink(url)) {
           setInitialUrl(toWebUrl(url));
         }
         setSearchHistoryJson(JSON.stringify(history));
@@ -139,8 +150,7 @@ export default function RootLayout() {
   // ウォームスタート: アプリ実行中のディープリンクを受け取る
   useEffect(() => {
     const subscription = Linking.addEventListener("url", (event) => {
-      // auth/callback は OAuth フロー用（openAuthSessionAsync が処理）→ 無視
-      if (!event.url.includes("/auth/callback")) {
+      if (shouldHandleDeepLink(event.url)) {
         setPendingDeepLink(toWebUrl(event.url));
       }
     });

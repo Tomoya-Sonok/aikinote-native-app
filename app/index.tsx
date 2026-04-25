@@ -49,6 +49,9 @@ export default function HomeScreen() {
   const pushTokenRegisteredRef = useRef(false);
   const pushTokenRef = useRef<string | null>(null);
   const authProcessingRef = useRef(false);
+  // WebView stall 検出: onLoadEnd 後に Web 側 USER_INFO が届かない場合のリロード制御
+  const stallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stalledUrlRef = useRef<string | null>(null);
 
   // Android: 戻るボタンで WebView 内の履歴を戻る
   useEffect(() => {
@@ -68,10 +71,46 @@ export default function HomeScreen() {
     }
   }, [pendingDeepLink, webView.navigateTo, clearPendingDeepLink]);
 
+  const clearStallTimer = useCallback(() => {
+    if (stallTimerRef.current) {
+      clearTimeout(stallTimerRef.current);
+      stallTimerRef.current = null;
+    }
+  }, []);
+
   const handleLoadEnd = useCallback(() => {
     webView.setLoaded();
     onWebViewReady();
-  }, [webView.setLoaded, onWebViewReady]);
+    // Web 側の React hydration が完了して useAuth が USER_INFO を postMessage するまで待機。
+    // 25 秒経っても届かなければ Suspense 等で詰まっているとみなし、URL 単位で 1 度だけ自動リロードする。
+    clearStallTimer();
+    const targetUrl = webView.sourceUrl;
+    stallTimerRef.current = setTimeout(() => {
+      stallTimerRef.current = null;
+      if (stalledUrlRef.current === targetUrl) return;
+      stalledUrlRef.current = targetUrl;
+      console.warn(
+        "[Stall] WebView が応答しないためリロードします:",
+        targetUrl,
+      );
+      webView.reload();
+    }, 25000);
+  }, [
+    webView.setLoaded,
+    webView.reload,
+    webView.sourceUrl,
+    onWebViewReady,
+    clearStallTimer,
+  ]);
+
+  // sourceUrl が変わったら stall 履歴をリセット（前ページの retry 抑制を引きずらない）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sourceUrl の変化で再実行することが目的のため、body 内で参照していなくても依存に残す
+  useEffect(() => {
+    stalledUrlRef.current = null;
+    return () => {
+      clearStallTimer();
+    };
+  }, [webView.sourceUrl, clearStallTimer]);
 
   const handleNavigationStateChange = useCallback(
     (canGoBack: boolean, url: string) => {
@@ -269,7 +308,11 @@ export default function HomeScreen() {
           "aikinotenativeapp://auth/callback",
         );
 
-        console.log("[OAuth] result:", result.type, (result as { url?: string }).url);
+        console.log(
+          "[OAuth] result:",
+          result.type,
+          (result as { url?: string }).url,
+        );
 
         // iOS: openAuthSessionAsync が URL をキャプチャ → ここで処理
         // Android: Expo Router が先にキャプチャ → callback.tsx → pendingAuthCode 経由で処理
@@ -363,6 +406,8 @@ export default function HomeScreen() {
           updateSearchHistoryJson(json);
           saveSearchHistory(data.payload);
         } else if (data.type === "USER_INFO" && data.payload) {
+          // hydration が成功して USER_INFO が届いた → stall タイマー解除
+          clearStallTimer();
           const newUserId = data.payload.userId ?? null;
           setProfileImageUrl(data.payload.profileImageUrl ?? null);
           setUserId(newUserId);
@@ -433,6 +478,7 @@ export default function HomeScreen() {
       isPremium,
       handleNativeOAuth,
       webView.executeScript,
+      clearStallTimer,
     ],
   );
 

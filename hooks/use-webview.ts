@@ -68,9 +68,14 @@ export function useWebView(initialUrl: string) {
   }, []);
 
   // WebView 内でパス遷移（source.uri は変更しない）
+  // location.assign を優先し、失敗時に location.href にフォールバック
+  // （iOS Simulator + 一部のページ遷移で href 直代入が無視されるケースを回避）
   const navigateInWebView = useCallback((path: string) => {
     ref.current?.injectJavaScript(`
-      window.location.href = '${path}';
+      (function() {
+        try { window.location.assign(${JSON.stringify(path)}); }
+        catch (e) { window.location.href = ${JSON.stringify(path)}; }
+      })();
       true;
     `);
   }, []);
