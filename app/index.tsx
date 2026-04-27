@@ -14,6 +14,10 @@ import { NetworkError } from "@/components/error/network-error";
 import { NativeHeader } from "@/components/header/native-header";
 import { SocialFeedNativeHeader } from "@/components/header/social-feed-header";
 import { OfflineBanner } from "@/components/offline/offline-banner";
+import {
+  AnimatedSplash,
+  SPLASH_FADE_OUT_DURATION_MS,
+} from "@/components/splash/animated-splash";
 import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikinoteWebView } from "@/components/webview/aikinote-webview";
 import { useWebView } from "@/hooks/use-webview";
@@ -44,6 +48,10 @@ export default function HomeScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isTutorialActive, setIsTutorialActive] = useState(false);
+  const [splashState, setSplashState] = useState<
+    "visible" | "fading-out" | "hidden"
+  >("visible");
+  const [splashAnimationDone, setSplashAnimationDone] = useState(false);
   const { identify, isPremium, offerings, purchasePackage } = useRevenueCat();
   const identifiedRef = useRef(false);
   const pushTokenRegisteredRef = useRef(false);
@@ -111,6 +119,32 @@ export default function HomeScreen() {
       clearStallTimer();
     };
   }, [webView.sourceUrl, clearStallTimer]);
+
+  const handleSplashAnimationComplete = useCallback(() => {
+    setSplashAnimationDone(true);
+  }, []);
+
+  // カスタムオープニング表示開始と同時に OS スプラッシュを hide してバトンタッチ
+  useEffect(() => {
+    onWebViewReady();
+  }, [onWebViewReady]);
+
+  // オープニングアニメーション完了 + WebView 初回ロード完了の両方が揃ったら
+  // カスタムオープニングをフェードアウトさせて WebView を見せる
+  useEffect(() => {
+    if (
+      splashState === "visible" &&
+      splashAnimationDone &&
+      webView.hasEverLoaded
+    ) {
+      setSplashState("fading-out");
+      const timer = setTimeout(
+        () => setSplashState("hidden"),
+        SPLASH_FADE_OUT_DURATION_MS,
+      );
+      return () => clearTimeout(timer);
+    }
+  }, [splashState, splashAnimationDone, webView.hasEverLoaded]);
 
   const handleNavigationStateChange = useCallback(
     (canGoBack: boolean, url: string) => {
@@ -597,6 +631,13 @@ export default function HomeScreen() {
       </View>
       {showTabBar && (
         <NativeTabBar activeTab={activeTab} onTabPress={handleTabPress} />
+      )}
+      {splashState !== "hidden" && (
+        <AnimatedSplash
+          visible={splashState === "visible"}
+          showLoader={splashAnimationDone && !webView.hasEverLoaded}
+          onAnimationComplete={handleSplashAnimationComplete}
+        />
       )}
     </View>
   );
