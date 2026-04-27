@@ -29,8 +29,9 @@ function buildNativeAppCSS() {
   var css = [];
 
   // タブナビゲーション: 常に非表示（TabNavigation 本体 + 各 Layout のラッパー div を含む）
+  // !important: 現状の Web 版 CSS は !important なし・詳細度同等で厳密には不要だが、
+  // 将来 Web 版に !important が加わっても確実に消せるよう防御的に維持。
   css.push('[data-testid="tab-navigation"], div[class*="tabContainer"], div[class*="tabNavigation"] { display: none !important; }');
-  css.push('main { padding-bottom: 0 !important; }');
 
   // FAB の下端位置: Web 版は TabNavigation 分 (約 82px) を確保しているが、
   // ネイティブアプリは TabNavigation を非表示にしているため下方の余白を詰める。
@@ -40,10 +41,17 @@ function buildNativeAppCSS() {
 
   if (type === 'default') {
     // DefaultHeader ページ: visibility hidden で縮小（NavigationDrawer + プロフィールカードは残す）
+    // !important 必須: Web 版 header は position: sticky で領域確保しており、
+    // visibility: hidden 単独では sticky 領域が残るため複合プロパティで強制的に潰す必要がある。
     css.push('header { visibility: hidden !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: none !important; overflow: visible !important; }');
+    // !important 必須: 上の header に visibility: hidden を当てた結果、
+    // 子要素（NavigationDrawer / ProfileCard 等）が visibility 継承で hidden になるため、
+    // !important で打ち消さないと表示されなくなる。
     css.push('[class*="overlay"], [class*="drawer"], [role="dialog"] { visibility: visible !important; }');
   } else if (type === 'social-feed') {
     // SocialFeedHeader ページ: header を完全非表示（NavigationDrawer なし）
+    // !important: 現状の Web 版 CSS は !important なしでも消せるが、
+    // header 周辺の競合を避けるため防御的に維持。
     css.push('header { display: none !important; }');
   }
   // type === 'web': ヘッダーは非表示にしない

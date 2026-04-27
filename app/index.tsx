@@ -608,5 +608,6 @@ const styles = StyleSheet.create({
   },
   webviewArea: {
     flex: 1,
+    backgroundColor: "#efecec",
   },
 });
