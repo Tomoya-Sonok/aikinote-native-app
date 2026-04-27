@@ -102,9 +102,22 @@ Apple App Store Guideline 4.2 系のラッパーアプリ審査リスクを下�
 - 対象: 選択肢 C（ネイティブ側 SQLite / WatermelonDB）または TanStack Query mutation キュー
 - 判断ポイント: 審査通過後のユーザー要望次第
 
-### Phase 4: 本番リリース
-- EAS Build で production ビルド
-- EAS Submit で App Store / Google Play へ提出
+### Phase 4: 本番リリース 🚧
+
+ストア公開に向けた段階的なリリース。テスター範囲を内部 → クローズド → 一般と広げてから本審査に提出する。
+
+#### 4-a. 内部テスト ✅
+- Android: Play Console 内部テストトラック (最大 100 名)
+- iOS: TestFlight 内部テスト (App Store Connect ユーザー、Beta App Review 不要)
+
+#### 4-b. クローズドテスト / TestFlight 外部テスト 🚧
+- Android: Play Console クローズドテストトラック (`eas.json` の `submit.production.android.track: "alpha"`、最大 2,000 名)
+- iOS: TestFlight 外部テスト (Apple ID メール招待、Beta App Review 必要 ~1〜2 営業日)
+- 詳細手順は下記「Google Play Console」「App Store Connect」節を参照
+
+#### 4-c. 本番公開 ☐
+- Android: クローズドテストで安定確認後 Play Console UI で本番トラックへ昇格
+- iOS: TestFlight ベータで安定確認後 App Store Connect で App Review 提出 → 本審査 (~24〜48h)
 
 ## 技術スタック
 
@@ -139,8 +152,14 @@ pnpm typecheck            # TypeScript 型チェック
 # EAS ビルド
 pnpm build:dev            # 開発ビルド（実機テスト用）
 pnpm build:preview        # プレビュービルド（内部配布）
-pnpm build:prod           # 本番ビルド
-pnpm submit               # ストア提出
+pnpm build:prod           # 本番ビルド（iOS .ipa / Android .aab、versionCode/buildNumber 自動 +1）
+
+# EAS Submit（最新ビルドをストアに提出）
+npx eas-cli submit --platform android --profile production --latest --non-interactive
+# → Android: Play Console クローズドテスト (`alpha` track) に AAB をアップロード
+
+npx eas-cli submit --platform ios --profile production --latest --non-interactive
+# → iOS: App Store Connect の TestFlight にビルドを送信。処理完了後 ASC UI で External Testing グループへ associate → Beta App Review 提出
 ```
 
 ### Development Build の作成
@@ -403,12 +422,25 @@ Next.js 16 の公式最低対応ブラウザが Safari 16.4 で、プリコン�
 
 ## EAS 設定（eas.json）
 
+### Build profile
+
 | プロファイル | 用途 | 配布方法 |
 |---|---|---|
 | `development` | 開発ビルド（DevClient、実機向け） | internal |
 | `development:simulator` | 開発ビルド（iOS シミュレーター向け） | internal |
 | `preview` | テスト配布 | internal |
 | `production` | ストア提出用 | store（自動バージョン番号インクリメント） |
+
+### Submit profile (`production`)
+
+| プラットフォーム | 設定 | 値 |
+|---|---|---|
+| Android | `track` | `alpha`（= Play Console「クローズドテスト」） |
+| iOS | `appleId` | `wlcmty08kh@gmail.com` |
+| iOS | `appleTeamId` | `K2829N93YA` |
+| iOS | `ascAppId` | （未指定。eas-cli が bundle identifier `com.aikinote` から自動検索） |
+
+iOS は初回 submit 時に App Store Connect API Key の登録 (`eas credentials`) を済ませておくと非対話モードで実行可能。Apple ID + App-specific password の場合は実行中に 2FA コード入力が必要になる。
 
 ## ローカルビルドの前提ツール
 
@@ -427,14 +459,89 @@ RevenueCat の Public API Key はクライアント向けで公開前提のた�
 
 ### App Store Connect
 
+#### 既存の状態
 - Paid Apps Agreement: **Active**（銀行口座・税務情報登録済み）
 - サブスクリプション商品: **Ready to Submit**（アプリ本体の App Review 提出時に一緒に審査される）
+- TestFlight 内部テスト: 動作確認済み (知人の iOS 26.x iPhone でクラッシュ・画面崩れなし)
+
+#### 初回提出メタデータチェックリスト
+
+新規アプリは Apple の本審査・Beta App Review いずれも下記メタデータが揃っていないとリジェクトされる。App Store Connect UI で順に完成させてから提出すること。
+
+**App Information** (アプリ詳細 → App Information)
+- Privacy Policy URL: `https://aikinote.com/ja/privacy`
+- Category: Primary `Lifestyle` または `Health & Fitness`、Secondary 任意
+- Content Rights: 第三者コンテンツ使用なしを明示
+- Bundle ID: `com.aikinote`
+- Age Rating 質問票: 暴力描写・成人向け・ギャンブル等の各項目を埋めて Rating を確定 (AikiNote は基本 4+ 想定)
+
+**Pricing and Availability**
+- 価格: 無料 (Free)
+- 配信地域: Japan のみで開始（後で全世界に拡大可）
+- Pre-orders: 無効
+
+**App Privacy** (Privacy Nutrition Labels)
+- Email Address: Linked to Identity, Used for App Functionality (Supabase Auth)
+- User ID: Linked to Identity, App Functionality
+- Device ID / Push Tokens: Linked to Identity, App Functionality (Expo Push Service)
+- Purchase History: Linked to Identity, App Functionality (RevenueCat IAP)
+- Crash Data / Performance Data: Apple 標準クラッシュレポート (収集してない場合は申告不要)
+
+**Encryption** (Export Compliance)
+- `app.json` の `ITSAppUsesNonExemptEncryption: false` で設定済み → 自動承認、追加作業なし
+
+#### TestFlight 配布フロー
+
+**内部テスト (Internal Testing)** — Beta App Review 不要、即時配信
+- 対象: App Store Connect の Admin / App Manager / Developer / Marketing 権限を持つユーザー (最大 100 名)
+- 用途: 自分・チームメンバーでの初期動作確認
+- 設定: TestFlight タブ → Internal Group 作成 → ビルドを Associate → 即座にテスター招待メール送信
+
+**外部テスト (External Testing)** — Beta App Review 必要 (~1〜2 営業日)、最大 10,000 名
+- 対象: Apple ID メールアドレスで招待した任意のユーザー (知人・モニターなど)
+- 用途: クローズドベータ、知人テスト、フィードバック収集
+- 必須項目 (Test Information):
+  - **Beta App Description** (~200 字、テスト目的・主要機能を記載)
+  - **Feedback Email** (`wlcmty08kh@gmail.com` 等)
+  - **Privacy Policy URL** (`https://aikinote.com/ja/privacy`)
+  - **Sign-in Information** (認証必須なので、テスト用アカウントを発行 or Reviewer Notes に「テスター自身のメールで新規登録可能」と記載)
+  - **Notes for Reviewer** (例: 「Web 版 AikiNote (Next.js) を WebView でラップしたアプリ。OAuth は Google / Apple SSO ともに動作」)
+- 提出フロー: External Group 作成 → テスター email 追加 → ビルドを Associate → 「Submit Build for Beta App Review」クリック → Apple 審査 → 承認後 Apple が招待メール自動送信
+
+#### 本審査 (App Review) — 別タイミングで実施
+TestFlight ベータで安定確認後に提出。手順:
+1. App Store version の Description / Keywords / Screenshots を入力 (6.7"・6.5"・5.5" の 3 サイズ必要)
+2. App Review Information: 連絡先・デモアカウント・Notes を記入
+3. Submit for Review → Apple 審査 (~24〜48h)
+4. Approved → 自動公開 or 手動リリース
+
+#### Apple Guideline 4.2 (Minimum Functionality) 対策
+
+WebView ラッパーアプリは 4.2 系でリジェクトされやすい。以下で対応済み:
+- Phase 5-a でオフライン対応 (キャッシュ表示) を実装
+- ネイティブ機能を実装: タブバー / ヘッダー / OAuth / IAP / プッシュ通知
+- Reviewer Notes に「WebView ラッパーではなく、ネイティブ統合機能を持つ」点を明記推奨
 
 ### Google Play Console
 
+#### 既存の状態
 - 内部テストトラック: AAB アップロード済み
 - 定期購入商品: 作成済み（Published）
 - Service Account: `revenuecat-integration@aikinote.iam.gserviceaccount.com`
+- 動作確認: Android 実機で完走済み (オフライン対応含む)
+
+#### クローズドテストへの移行
+
+`eas.json` の `submit.production.android.track` を `internal` から **`alpha`** (= Play Console「クローズドテスト」) に変更。これにより `npx eas-cli submit --platform android --profile production --latest` がそのままクローズドテストトラックに AAB をアップロードする。
+
+**Play Console UI 作業手順**:
+1. 「リリース → テスト → クローズドテスト」を開く
+2. 該当バージョン（`versionCode 14` 等）の編集画面でリリースノートを記入 (日本語必須、英語追加推奨)
+3. 「テスター」タブでテスターを追加: メーリングリスト URL or 個別 email リスト (最大 2,000 名)
+4. 「レビューしてリリース」→ 公開
+5. 数分〜数十分で各テスターに招待リンクが反映される (招待リンクから Play Store 上で「テスターに参加」を押せばインストール可能)
+
+既存の internal トラックはそのまま残しても支障なし (より少人数の確認用に運用可)。
 
 #### 初回 submit 時のメタデータ準備チェックリスト
 

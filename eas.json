@@ -25,7 +25,11 @@
   "submit": {
     "production": {
       "android": {
-        "track": "internal"
+        "track": "alpha"
+      },
+      "ios": {
+        "appleId": "wlcmty08kh@gmail.com",
+        "appleTeamId": "K2829N93YA"
       }
     }
   }
