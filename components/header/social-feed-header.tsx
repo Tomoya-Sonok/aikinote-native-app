@@ -1,33 +1,59 @@
 import { Bell, MagnifyingGlass, User } from "phosphor-react-native";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { Locale } from "@/lib/navigation/tab-utils";
 
 type SocialFeedNativeHeaderProps = {
   profileImageUrl: string | null;
   unreadNotificationCount: number;
+  locale: Locale;
   onProfilePress: () => void;
   onNotificationPress: () => void;
   onSearchPress: () => void;
 };
 
+const LABELS: Record<
+  Locale,
+  { title: string; notifications: string; search: string; profile: string }
+> = {
+  ja: {
+    title: "投稿一覧",
+    notifications: "通知一覧",
+    search: "投稿を検索",
+    profile: "プロフィールを開く",
+  },
+  en: {
+    title: "Posts",
+    notifications: "Notifications",
+    search: "Search posts",
+    profile: "Open profile",
+  },
+};
+
 export function SocialFeedNativeHeader({
   profileImageUrl,
   unreadNotificationCount,
+  locale,
   onProfilePress,
   onNotificationPress,
   onSearchPress,
 }: SocialFeedNativeHeaderProps) {
   const insets = useSafeAreaInsets();
+  const labels = LABELS[locale];
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.inner}>
         <View style={styles.absoluteTitleWrap}>
           <Text style={styles.title} numberOfLines={1}>
-            投稿一覧
+            {labels.title}
           </Text>
         </View>
-        <Pressable onPress={onProfilePress} style={styles.profileButton}>
+        <Pressable
+          onPress={onProfilePress}
+          style={styles.profileButton}
+          accessibilityLabel={labels.profile}
+        >
           {profileImageUrl ? (
             <Image
               source={{ uri: profileImageUrl }}
@@ -43,7 +69,7 @@ export function SocialFeedNativeHeader({
           <Pressable
             onPress={onNotificationPress}
             style={styles.iconButton}
-            accessibilityLabel="通知一覧"
+            accessibilityLabel={labels.notifications}
           >
             <Bell size={24} weight="regular" color="#2c2c2c" />
             {unreadNotificationCount > 0 && <View style={styles.badge} />}
@@ -51,7 +77,7 @@ export function SocialFeedNativeHeader({
           <Pressable
             onPress={onSearchPress}
             style={styles.iconButton}
-            accessibilityLabel="投稿を検索"
+            accessibilityLabel={labels.search}
           >
             <MagnifyingGlass size={24} weight="regular" color="#2c2c2c" />
           </Pressable>

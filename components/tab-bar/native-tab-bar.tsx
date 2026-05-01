@@ -1,17 +1,23 @@
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
-import { TABS, type TabId } from "@/lib/navigation/tab-utils";
+import { type Locale, TABS, type TabId } from "@/lib/navigation/tab-utils";
 
 type NativeTabBarProps = {
   activeTab: TabId | null;
-  onTabPress: (path: string) => void;
+  locale: Locale;
+  // pathSuffix (locale prefix なし) を受け取り、呼び出し元側で /<locale> を付与する
+  onTabPress: (pathSuffix: string) => void;
 };
 
 const ACTIVE_COLOR = "#2c2c2c";
 const INACTIVE_COLOR = "#8b8178";
 
-export function NativeTabBar({ activeTab, onTabPress }: NativeTabBarProps) {
+export function NativeTabBar({
+  activeTab,
+  locale,
+  onTabPress,
+}: NativeTabBarProps) {
   const insets = useSafeAreaInsets();
 
   if (activeTab === null) return null;
@@ -25,7 +31,7 @@ export function NativeTabBar({ activeTab, onTabPress }: NativeTabBarProps) {
           <Pressable
             key={tab.id}
             style={styles.tab}
-            onPress={() => onTabPress(tab.path)}
+            onPress={() => onTabPress(tab.pathSuffix)}
           >
             <View style={[styles.tabInner, isActive && styles.tabInnerActive]}>
               <IconComponent
@@ -40,7 +46,7 @@ export function NativeTabBar({ activeTab, onTabPress }: NativeTabBarProps) {
                   isActive && styles.labelActive,
                 ]}
               >
-                {tab.label}
+                {tab.labels[locale]}
               </ThemedText>
             </View>
           </Pressable>

@@ -21,7 +21,12 @@ import {
 import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikinoteWebView } from "@/components/webview/aikinote-webview";
 import { useWebView } from "@/hooks/use-webview";
-import { getActiveTab, getHeaderType } from "@/lib/navigation/tab-utils";
+import {
+  buildLocalePath,
+  getActiveTab,
+  getHeaderType,
+  getLocale,
+} from "@/lib/navigation/tab-utils";
 import { useRevenueCat } from "@/lib/purchases/RevenueCatProvider";
 import { registerForPushNotifications } from "@/lib/push-notifications";
 import { saveSearchHistory } from "@/lib/storage/webview-storage";
@@ -44,6 +49,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const activeTab = getActiveTab(webView.displayUrl);
   const headerType = getHeaderType(webView.displayUrl);
+  const locale = getLocale(webView.displayUrl);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
@@ -155,15 +161,15 @@ export default function HomeScreen() {
   );
 
   const handleTabPress = useCallback(
-    (path: string) => {
-      webView.navigateInWebView(path);
+    (pathSuffix: string) => {
+      webView.navigateInWebView(buildLocalePath(locale, pathSuffix));
     },
-    [webView.navigateInWebView],
+    [webView.navigateInWebView, locale],
   );
 
   const handleLogoPress = useCallback(() => {
-    webView.navigateInWebView("/personal/pages");
-  }, [webView.navigateInWebView]);
+    webView.navigateInWebView(buildLocalePath(locale, "/personal/pages"));
+  }, [webView.navigateInWebView, locale]);
 
   // アバタータップ: Web 版の隠れたアバターボタンをクリックしてプロフィールカードを表示
   const handleAvatarPress = useCallback(() => {
@@ -276,7 +282,7 @@ export default function HomeScreen() {
                 window.__oauthResolve({ success: true });
                 window.__oauthResolve = null;
               }
-              location.replace('/personal/pages');
+              location.replace('/${locale}/personal/pages');
             } else {
               if (window.__oauthResolve) {
                 window.__oauthResolve({ success: false, reason: 'session_api_failed' });
@@ -302,7 +308,7 @@ export default function HomeScreen() {
         authProcessingRef.current = false;
       }
     },
-    [webView.executeScript, sendToWebView],
+    [webView.executeScript, sendToWebView, locale],
   );
 
   // Android: callback.tsx 経由で受け取った code を処理
@@ -380,7 +386,7 @@ export default function HomeScreen() {
                     window.__oauthResolve({ success: true });
                     window.__oauthResolve = null;
                   }
-                  location.replace('/personal/pages');
+                  location.replace('/${locale}/personal/pages');
                 } else {
                   if (window.__oauthResolve) {
                     window.__oauthResolve({ success: false, reason: 'session_api_failed' });
@@ -424,7 +430,7 @@ export default function HomeScreen() {
         });
       }
     },
-    [webView.executeScript, processOAuthCode, sendToWebView],
+    [webView.executeScript, processOAuthCode, sendToWebView, locale],
   );
 
   // WebView からのメッセージ受信
@@ -559,21 +565,23 @@ export default function HomeScreen() {
   // SocialFeedHeader: プロフィール画像タップ → /social/profile/[userId]
   const handleProfilePress = useCallback(() => {
     if (userId) {
-      webView.navigateInWebView(`/social/profile/${userId}`);
+      webView.navigateInWebView(
+        buildLocalePath(locale, `/social/profile/${userId}`),
+      );
     } else {
-      webView.navigateInWebView("/mypage");
+      webView.navigateInWebView(buildLocalePath(locale, "/mypage"));
     }
-  }, [webView.navigateInWebView, userId]);
+  }, [webView.navigateInWebView, userId, locale]);
 
   // SocialFeedHeader: 通知アイコンタップ
   const handleNotificationPress = useCallback(() => {
-    webView.navigateInWebView("/social/notifications");
-  }, [webView.navigateInWebView]);
+    webView.navigateInWebView(buildLocalePath(locale, "/social/notifications"));
+  }, [webView.navigateInWebView, locale]);
 
   // SocialFeedHeader: 検索アイコンタップ
   const handleSearchPress = useCallback(() => {
-    webView.navigateInWebView("/social/posts/search");
-  }, [webView.navigateInWebView]);
+    webView.navigateInWebView(buildLocalePath(locale, "/social/posts/search"));
+  }, [webView.navigateInWebView, locale]);
 
   // 完全なエラー画面の条件:
   // - WebView の HTTP/JS エラー（hasError）
@@ -596,6 +604,7 @@ export default function HomeScreen() {
       {showHeader && headerType === "default" && (
         <NativeHeader
           profileImageUrl={profileImageUrl}
+          locale={locale}
           onLogoPress={handleLogoPress}
           onAvatarPress={handleAvatarPress}
           onMenuPress={handleMenuPress}
@@ -605,6 +614,7 @@ export default function HomeScreen() {
         <SocialFeedNativeHeader
           profileImageUrl={profileImageUrl}
           unreadNotificationCount={unreadNotificationCount}
+          locale={locale}
           onProfilePress={handleProfilePress}
           onNotificationPress={handleNotificationPress}
           onSearchPress={handleSearchPress}
@@ -630,7 +640,11 @@ export default function HomeScreen() {
         />
       </View>
       {showTabBar && (
-        <NativeTabBar activeTab={activeTab} onTabPress={handleTabPress} />
+        <NativeTabBar
+          activeTab={activeTab}
+          locale={locale}
+          onTabPress={handleTabPress}
+        />
       )}
       {splashState !== "hidden" && (
         <AnimatedSplash

@@ -4,30 +4,37 @@ import type { FC } from "react";
 
 export type TabId = "personal" | "social" | "mypage";
 
+// Web 版 next-intl で対応している locale。Web 側の default ('ja') と一致させる。
+export type Locale = "ja" | "en";
+
+const SUPPORTED_LOCALES: readonly Locale[] = ["ja", "en"] as const;
+const DEFAULT_LOCALE: Locale = "ja";
+
 type TabDefinition = {
   id: TabId;
-  label: string;
-  path: string;
+  labels: Record<Locale, string>;
+  // locale prefix を含まない pathname。実際の遷移時は buildLocalePath で /<locale> を付与する。
+  pathSuffix: string;
   icon: FC<IconProps>;
 };
 
 export const TABS: TabDefinition[] = [
   {
     id: "personal",
-    label: "ひとりで",
-    path: "/personal/pages",
+    labels: { ja: "ひとりで", en: "Personal" },
+    pathSuffix: "/personal/pages",
     icon: PencilSimple,
   },
   {
     id: "social",
-    label: "みんなで",
-    path: "/social/posts",
+    labels: { ja: "みんなで", en: "Social" },
+    pathSuffix: "/social/posts",
     icon: Chats,
   },
   {
     id: "mypage",
-    label: "マイページ",
-    path: "/mypage",
+    labels: { ja: "マイページ", en: "My Page" },
+    pathSuffix: "/mypage",
     icon: IdentificationCard,
   },
 ];
@@ -39,6 +46,36 @@ function normalizePathname(url: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * URL の pathname から locale を抽出する。
+ * 例: https://www.aikinote.com/en/personal/pages → "en"
+ *     https://www.aikinote.com/ja/social/posts → "ja"
+ *     https://www.aikinote.com/login (locale prefix なし) → "ja" (default)
+ */
+export function getLocale(url: string): Locale {
+  try {
+    const { pathname } = new URL(url);
+    const match = pathname.match(/^\/([a-z]{2})(?=\/|$)/);
+    if (match) {
+      const candidate = match[1] as Locale;
+      if (SUPPORTED_LOCALES.includes(candidate)) {
+        return candidate;
+      }
+    }
+  } catch {
+    // URL パース失敗時は default
+  }
+  return DEFAULT_LOCALE;
+}
+
+/**
+ * locale prefix を付けた pathname を生成する。
+ * 例: buildLocalePath("en", "/personal/pages") → "/en/personal/pages"
+ */
+export function buildLocalePath(locale: Locale, pathSuffix: string): string {
+  return `/${locale}${pathSuffix}`;
 }
 
 /**

@@ -1,26 +1,48 @@
 import { List, User } from "phosphor-react-native";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { Locale } from "@/lib/navigation/tab-utils";
 
 type NativeHeaderProps = {
   profileImageUrl: string | null;
+  locale: Locale;
   onLogoPress: () => void;
   onAvatarPress: () => void;
   onMenuPress: () => void;
 };
 
+const LABELS: Record<Locale, { logo: string; profile: string; menu: string }> =
+  {
+    ja: {
+      logo: "ホームに戻る",
+      profile: "プロフィールを開く",
+      menu: "メニューを開く",
+    },
+    en: {
+      logo: "Go to home",
+      profile: "Open profile",
+      menu: "Open menu",
+    },
+  };
+
 export function NativeHeader({
   profileImageUrl,
+  locale,
   onLogoPress,
   onAvatarPress,
   onMenuPress,
 }: NativeHeaderProps) {
   const insets = useSafeAreaInsets();
+  const labels = LABELS[locale];
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.inner}>
-        <Pressable onPress={onLogoPress} style={styles.logoButton}>
+        <Pressable
+          onPress={onLogoPress}
+          style={styles.logoButton}
+          accessibilityLabel={labels.logo}
+        >
           <Image
             source={require("@/assets/images/aikinote-logo.png")}
             style={styles.logo}
@@ -28,7 +50,11 @@ export function NativeHeader({
           />
         </Pressable>
         <View style={styles.rightSection}>
-          <Pressable onPress={onAvatarPress} style={styles.avatarButton}>
+          <Pressable
+            onPress={onAvatarPress}
+            style={styles.avatarButton}
+            accessibilityLabel={labels.profile}
+          >
             {profileImageUrl ? (
               <Image
                 source={{ uri: profileImageUrl }}
@@ -40,7 +66,11 @@ export function NativeHeader({
               </View>
             )}
           </Pressable>
-          <Pressable onPress={onMenuPress} style={styles.menuButton}>
+          <Pressable
+            onPress={onMenuPress}
+            style={styles.menuButton}
+            accessibilityLabel={labels.menu}
+          >
             <List size={24} weight="light" color="#2c2c2c" />
           </Pressable>
         </View>
