@@ -51,10 +51,12 @@ type AppContextValue = {
   setPendingAuthCode: (code: string | null) => void;
 };
 
-// ネイティブアプリはランディングページではなく /login を起点にする。
-// 認証済みユーザーは Web 版 /login 側で /personal/pages にサーバーリダイレクトされるので、
-// 未認証ユーザーのみが実際にログイン画面を見る。
-const NATIVE_INITIAL_URL = `${config.webBaseUrl}/login`;
+// ネイティブアプリはランディングページではなく /signup を起点にする。
+// アプリから AikiNote を初めて使うユーザーにとっては新規登録が自然な初動線で、
+// 既存ユーザー向けには /signup ページ内に「ログイン」リンクが用意されている。
+// 認証済みユーザーは Web 版 /signup 側で /personal/pages にサーバーリダイレクトされるので、
+// 未認証ユーザーのみが実際に新規登録画面を見る。
+const NATIVE_INITIAL_URL = `${config.webBaseUrl}/signup`;
 
 // Web 版に転送すべきでないディープリンクを判定する。
 // - /auth/callback: OAuth フロー（openAuthSessionAsync が処理）

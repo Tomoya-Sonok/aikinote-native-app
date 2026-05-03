@@ -45,8 +45,8 @@ Web 版 AikiNote（`/projects/aikinote`）を WebView で表示するラッパ�
 - ネイティブ: `app/index.tsx` の `handleMessage` に `TUTORIAL_STATE` ケース追加、`isTutorialActive` state を導入し、`NativeHeader` / `SocialFeedNativeHeader` / `NativeTabBar` の描画を条件分岐
 - ドキュメント: 「WebView ↔ ネイティブ通信」表に `TUTORIAL_STATE` を追記
 
-#### T2. ランディング → /login 動線整備 & Web 版ログイン失敗時の /signup 自動遷移
-- ネイティブ側の初期遷移: Web 版 `/`（`aikinote/frontend/src/app/[locale]/page.tsx`）にネイティブ判定を追加し、未認証時は `/login` へ `redirect()`（実装案 A）
+#### T2. ネイティブ初期遷移 → /signup & Web 版ログイン失敗時の /signup 自動遷移
+- ネイティブ側の初期遷移: WebView の初期 URL を `${config.webBaseUrl}/signup` に固定（`app/_layout.tsx` の `NATIVE_INITIAL_URL` 定数）。アプリから AikiNote を初めて使うユーザーには新規登録が自然な初動線であるため、`/login` ではなく `/signup` を起点にする。認証済みユーザーは Web 版 `/signup` 側で `/personal/pages` にサーバーリダイレクトされるので影響なし。既存ユーザーは `/signup` ページ内の「ログイン」リンクから `/login` に遷移可能
 - Web 版: `aikinote/frontend/src/lib/hooks/useAuth.ts` の `signInWithCredentials` で `Invalid login credentials` 相当のエラー時、トーストで新規登録を促しつつ `location.replace('/signup?email=...')` で遷移
 - 注意: Web ブラウザ経由の UX にも影響するため、文言・挙動はユーザー確認を経てから反映
 
