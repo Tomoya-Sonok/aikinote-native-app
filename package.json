@@ -14,6 +14,7 @@
     "build:dev": "EXPO_NO_CAPABILITY_SYNC=1 eas build --profile development --platform all",
     "build:preview": "EXPO_NO_CAPABILITY_SYNC=1 eas build --profile preview --platform all",
     "build:prod": "EXPO_NO_CAPABILITY_SYNC=1 eas build --profile production --platform all",
+    "release:prod": "EXPO_NO_CAPABILITY_SYNC=1 eas build --profile production --platform all --auto-submit",
     "submit": "eas submit --platform all",
     "prepare": "husky"
   },

@@ -154,7 +154,12 @@ pnpm build:dev            # 開発ビルド（実機テスト用）
 pnpm build:preview        # プレビュービルド（内部配布）
 pnpm build:prod           # 本番ビルド（iOS .ipa / Android .aab、versionCode/buildNumber 自動 +1）
 
-# EAS Submit（最新ビルドをストアに提出）
+# 本番ビルド + ストア自動 submit（推奨フロー）
+pnpm release:prod         # iOS / Android 両方をビルドし、完了次第 eas.json の submit.production
+                          # 設定（Android: alpha track / iOS: TestFlight）に従って自動提出する。
+                          # ビルドが片方失敗した場合、そのプラットフォームの submit はスキップされる。
+
+# EAS Submit 単体（既存ビルドをストアに提出する場合）
 npx eas-cli submit --platform android --profile production --latest --non-interactive
 # → Android: Play Console クローズドテスト (`alpha` track) に AAB をアップロード
 
