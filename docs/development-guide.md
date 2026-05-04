@@ -154,12 +154,20 @@ pnpm build:dev            # 開発ビルド（実機テスト用）
 pnpm build:preview        # プレビュービルド（内部配布）
 pnpm build:prod           # 本番ビルド（iOS .ipa / Android .aab、versionCode/buildNumber 自動 +1）
 
-# 本番ビルド + ストア自動 submit（推奨フロー）
-pnpm release:prod         # iOS / Android 両方をビルドし、完了次第 eas.json の submit.production
-                          # 設定（Android: alpha track / iOS: TestFlight）に従って自動提出する。
-                          # ビルドが片方失敗した場合、そのプラットフォームの submit はスキップされる。
+# 本番ビルド + ストア submit（推奨フロー）
+pnpm release:prod         # 内部で `pnpm build:prod && pnpm submit:prod` を逐次実行。
+                          # まず iOS / Android 両方のビルド完了を待ち、両方成功した場合に限り
+                          # eas.json の submit.production 設定（Android: alpha track / iOS: TestFlight）
+                          # に従って `--latest`（直前に完了したビルド）を提出する。
+                          # どちらかのビルドが失敗した場合、submit ステップは両プラットフォームとも
+                          # スキップされる（古いビルドが誤って提出されることはない）。失敗側を直してから
+                          # 再度 pnpm release:prod を回すか、成功した側だけ submit したい場合は
+                          # 下記の `pnpm submit:prod` もしくは個別 eas-cli submit を手動実行する。
 
-# EAS Submit 単体（既存ビルドをストアに提出する場合）
+pnpm submit:prod          # ビルドはせず、直前に完了した production ビルドを iOS / Android 両方
+                          # `--latest --non-interactive` で submit するだけのスクリプト。
+
+# EAS Submit 単体（既存ビルドをストアに提出する場合 / 片側だけ提出したい場合）
 npx eas-cli submit --platform android --profile production --latest --non-interactive
 # → Android: Play Console クローズドテスト (`alpha` track) に AAB をアップロード
 
