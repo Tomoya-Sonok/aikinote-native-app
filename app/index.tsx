@@ -26,6 +26,7 @@ import {
   getActiveTab,
   getHeaderType,
   getLocale,
+  type TabId,
 } from "@/lib/navigation/tab-utils";
 import { useRevenueCat } from "@/lib/purchases/RevenueCatProvider";
 import { registerForPushNotifications } from "@/lib/push-notifications";
@@ -47,7 +48,12 @@ export default function HomeScreen() {
   const netInfo = useNetInfo();
   const isOffline = netInfo.isConnected === false;
   const insets = useSafeAreaInsets();
-  const activeTab = getActiveTab(webView.displayUrl);
+  const resolvedTab = getActiveTab(webView.displayUrl);
+  const [optimisticTab, setOptimisticTab] = useState<TabId | null>(null);
+  const optimisticTabTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const activeTab = optimisticTab ?? resolvedTab;
   const headerType = getHeaderType(webView.displayUrl);
   const locale = getLocale(webView.displayUrl);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
@@ -160,11 +166,44 @@ export default function HomeScreen() {
     [webView.setCanGoBack, webView.setDisplayUrl],
   );
 
+  // resolvedTab が変化したら optimistic を解除
+  // （期待通り着地・別タブ着地・null 着地を一律処理）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: optimisticTab を依存に入れると毎回発火するため除外
+  useEffect(() => {
+    if (optimisticTab === null) return;
+    setOptimisticTab(null);
+    if (optimisticTabTimerRef.current) {
+      clearTimeout(optimisticTabTimerRef.current);
+      optimisticTabTimerRef.current = null;
+    }
+  }, [resolvedTab]);
+
+  useEffect(() => {
+    return () => {
+      if (optimisticTabTimerRef.current) {
+        clearTimeout(optimisticTabTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleTabPress = useCallback(
-    (pathSuffix: string) => {
+    (tabId: TabId, pathSuffix: string) => {
+      if (activeTab === tabId) return;
+
+      setOptimisticTab(tabId);
+
+      if (optimisticTabTimerRef.current) {
+        clearTimeout(optimisticTabTimerRef.current);
+      }
+      // ナビゲーション失敗・オフライン時の固着対策（onNavigationStateChange が永遠に届かないケースの保険）
+      optimisticTabTimerRef.current = setTimeout(() => {
+        optimisticTabTimerRef.current = null;
+        setOptimisticTab(null);
+      }, 2000);
+
       webView.navigateInWebView(buildLocalePath(locale, pathSuffix));
     },
-    [webView.navigateInWebView, locale],
+    [activeTab, webView.navigateInWebView, locale],
   );
 
   const handleLogoPress = useCallback(() => {

@@ -6,8 +6,8 @@ import { type Locale, TABS, type TabId } from "@/lib/navigation/tab-utils";
 type NativeTabBarProps = {
   activeTab: TabId | null;
   locale: Locale;
-  // pathSuffix (locale prefix なし) を受け取り、呼び出し元側で /<locale> を付与する
-  onTabPress: (pathSuffix: string) => void;
+  // tabId は呼び出し元の optimistic state 用、pathSuffix は遷移先構築用（呼び出し元で /<locale> を付与する）
+  onTabPress: (tabId: TabId, pathSuffix: string) => void;
 };
 
 const ACTIVE_COLOR = "#2c2c2c";
@@ -31,7 +31,7 @@ export function NativeTabBar({
           <Pressable
             key={tab.id}
             style={styles.tab}
-            onPress={() => onTabPress(tab.pathSuffix)}
+            onPress={() => onTabPress(tab.id, tab.pathSuffix)}
           >
             <View style={[styles.tabInner, isActive && styles.tabInnerActive]}>
               <IconComponent
