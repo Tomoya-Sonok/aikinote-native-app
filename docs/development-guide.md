@@ -46,7 +46,7 @@ Web 版 AikiNote（`/projects/aikinote`）を WebView で表示するラッパ�
 - ドキュメント: 「WebView ↔ ネイティブ通信」表に `TUTORIAL_STATE` を追記
 
 #### T2. ネイティブ初期遷移 → /signup & Web 版ログイン失敗時の /signup 自動遷移
-- ネイティブ側の初期遷移: WebView の初期 URL を `${config.webBaseUrl}/signup` に固定（`app/_layout.tsx` の `NATIVE_INITIAL_URL` 定数）。アプリから AikiNote を初めて使うユーザーには新規登録が自然な初動線であるため、`/login` ではなく `/signup` を起点にする。認証済みユーザーは Web 版 `/signup` 側で `/personal/pages` にサーバーリダイレクトされるので影響なし。既存ユーザーは `/signup` ページ内の「ログイン」リンクから `/login` に遷移可能
+- ネイティブ側の初期遷移: WebView の初期 URL は `app/_layout.tsx` のコールドスタート初期化で AsyncStorage の `aikinote_native_tutorial_seen` を読んで動的決定する。**初回起動（フラグ未設定）の場合は `${config.webBaseUrl}/native-onboarding`** を表示し、Web 版チュートリアル（`Tutorial mode="native-onboarding"`）の最後に「新規登録」CTA / 「すでにアカウントをお持ちの方はこちら」リンクから `/signup` または `/login` に遷移する流れにする。**チュートリアル完了済み（フラグ true）の場合は従来通り `${config.webBaseUrl}/signup`** を起点にする。アプリから AikiNote を初めて使うユーザーにとって新規登録が自然な初動線であることに変わりはない。認証済みユーザーは Web 版 `/signup` 側で `/personal/pages` にサーバーリダイレクトされるので影響なし
 - Web 版: `aikinote/frontend/src/lib/hooks/useAuth.ts` の `signInWithCredentials` で `Invalid login credentials` 相当のエラー時、トーストで新規登録を促しつつ `location.replace('/signup?email=...')` で遷移
 - 注意: Web ブラウザ経由の UX にも影響するため、文言・挙動はユーザー確認を経てから反映
 
@@ -175,6 +175,29 @@ npx eas-cli submit --platform ios --profile production --latest --non-interactiv
 # → iOS: App Store Connect の TestFlight にビルドを送信。処理完了後 ASC UI で External Testing グループへ associate → Beta App Review 提出
 ```
 
+### リリースノートの更新（手動）
+
+`eas submit` はバイナリ提出のみを担当し、**リリースノート（"What's New" / "テスト内容" / Play Console「リリースノート」）の送信機能は持たない**。`eas.json` の submit プロファイルに対応フィールドは存在せず、`eas submit` 実行時にインタラクティブな入力プロンプトも出ない。よって `pnpm release:prod`（または `pnpm submit:prod`）の完了後、各ストアの管理画面で**手動入力する必要がある**。バイナリ提出とは独立しているため、submit 完了後いつでも反映できる（タイミングが前後しても問題なし）。
+
+#### Google Play Console（Android / `alpha` track）
+
+- 画面パス: 「リリース → テスト → クローズドテスト → 該当バージョンの編集」
+- 入力欄: 「このリリースの新機能」（ロケール別 `ja-JP` / `en-US`、各ロケール **500 字以内**）
+- 既存バージョン全体の手順詳細は本ファイル下部の [クローズドテストへの移行](#クローズドテストへの移行) セクションを参照（手順 2 でリリースノートを記入）
+
+#### App Store Connect（iOS）
+
+| 用途 | 画面パス | 文字数 |
+|---|---|---|
+| TestFlight ビルドのテスト内容（"What to Test"） | 「TestFlight → ビルド一覧 → 該当ビルド → テスト情報」 | ロケール別、最大 4000 字 |
+| 本番 App Store リリースの "What's New in This Version" | 「App Store → iOS App → +バージョン または編集 → このバージョンの新機能」 | ロケール別、最大 4000 字 |
+
+ローカライズ済みの定型文・テンプレート文言は [`./app-store-connect-submission.md`](./app-store-connect-submission.md) に集約してある（Promotional Text / Description / Keywords / What's New 等）。リリースのたびに新規の差分文言だけを上記入力欄に貼り付けるか、テンプレートを編集して使い回す運用。
+
+> **Apple 側のルール**: 本番版を「Submit for Review」に進める前に、各ロケールの "What's New" 入力が**必須項目**になる。空欄のままだと審査提出ボタンが活性化しない。
+
+> **将来的にインタラクティブ化したくなったら**: Fastlane (`supply` / `deliver`)、App Store Connect API + Google Play Developer API を直接叩く自作 Node スクリプト、もしくは EAS Metadata（iOS のみ・beta）の選択肢がある。現在は GUI 手動運用で十分という判断のため未実装。
+
 ### Development Build の作成
 
 Expo Go では動作しないため、Development Build が必要。詳細は [`docs/build-and-test.md`](./build-and-test.md) を参照。
@@ -294,6 +317,7 @@ URL に応じてネイティブヘッダーと Web 版ヘッダーを切り替�
 | `USER_INFO` | Web → Native | プロフィール画像 URL・ユーザー ID（Web 版 `useAuth` が認証状態変化時に能動的に送信） |
 | `UNREAD_NOTIFICATION_COUNT` | Web → Native | 未読通知数（Web 版 `SocialFeedHeader` がポーリング結果を送信、ネイティブ SocialFeedHeader のベルアイコンバッジ表示に使用） |
 | `TUTORIAL_STATE` | Web → Native | 初回チュートリアルの表示中フラグ（Web 版 `Tutorial.tsx` mount/unmount で送信、ネイティブヘッダー/タブバーの表示制御に使用） |
+| `TUTORIAL_COMPLETED` | Web → Native | アプリ初回起動チュートリアルの完了通知。AsyncStorage `aikinote_native_tutorial_seen=true` を保存し、次回以降の起動時に `/native-onboarding` をスキップして `/signup` へ直接遷移させる |
 | `INITIATE_IAP` | Web → Native | 課金リクエスト。`payload.planType: "monthly" \| "yearly"` で直接購入、未指定の場合は Paywall UI にフォールバック |
 | `SHOW_CUSTOMER_CENTER` | Web → Native | サブスクリプション管理画面を表示 |
 | `GET_SUBSCRIPTION_STATUS` | Web → Native | サブスクリプション状態の問い合わせ |

@@ -22,7 +22,10 @@ import { toWebUrl } from "@/lib/deep-link";
 import { Notifications } from "@/lib/notifications";
 import { RevenueCatProvider } from "@/lib/purchases/RevenueCatProvider";
 import { setupNotificationChannel } from "@/lib/push-notifications";
-import { getSearchHistory } from "@/lib/storage/webview-storage";
+import {
+  getNativeTutorialSeen,
+  getSearchHistory,
+} from "@/lib/storage/webview-storage";
 
 // アプリ起動時にスプラッシュスクリーンを維持
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -56,7 +59,10 @@ type AppContextValue = {
 // 既存ユーザー向けには /signup ページ内に「ログイン」リンクが用意されている。
 // 認証済みユーザーは Web 版 /signup 側で /personal/pages にサーバーリダイレクトされるので、
 // 未認証ユーザーのみが実際に新規登録画面を見る。
+// ただし、AsyncStorage の aikinote_native_tutorial_seen が false（初回起動）の場合は
+// /native-onboarding を表示し、チュートリアル完了後に /signup へ遷移する流れにする。
 const NATIVE_INITIAL_URL = `${config.webBaseUrl}/signup`;
+const NATIVE_ONBOARDING_URL = `${config.webBaseUrl}/native-onboarding`;
 
 // Web 版に転送すべきでないディープリンクを判定する。
 // - /auth/callback: OAuth フロー（openAuthSessionAsync が処理）
@@ -136,17 +142,23 @@ export default function RootLayout() {
     return () => subscription.remove();
   }, []);
 
-  // コールドスタート: 起動時のディープリンク取得 + AsyncStorage から検索履歴読み込み
+  // コールドスタート: 起動時のディープリンク取得 + AsyncStorage から検索履歴・
+  // チュートリアル表示済みフラグを読み込む
   useEffect(() => {
-    Promise.all([Linking.getInitialURL(), getSearchHistory()]).then(
-      ([url, history]) => {
-        if (url && shouldHandleDeepLink(url)) {
-          setInitialUrl(toWebUrl(url));
-        }
-        setSearchHistoryJson(JSON.stringify(history));
-        setIsReady(true);
-      },
-    );
+    Promise.all([
+      Linking.getInitialURL(),
+      getSearchHistory(),
+      getNativeTutorialSeen(),
+    ]).then(([url, history, tutorialSeen]) => {
+      if (url && shouldHandleDeepLink(url)) {
+        // ディープリンクは常に最優先。チュートリアルは次回起動時に出せばよい
+        setInitialUrl(toWebUrl(url));
+      } else if (!tutorialSeen) {
+        setInitialUrl(NATIVE_ONBOARDING_URL);
+      }
+      setSearchHistoryJson(JSON.stringify(history));
+      setIsReady(true);
+    });
   }, []);
 
   // ウォームスタート: アプリ実行中のディープリンクを受け取る

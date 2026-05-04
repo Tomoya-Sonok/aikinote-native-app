@@ -30,7 +30,10 @@ import {
 } from "@/lib/navigation/tab-utils";
 import { useRevenueCat } from "@/lib/purchases/RevenueCatProvider";
 import { registerForPushNotifications } from "@/lib/push-notifications";
-import { saveSearchHistory } from "@/lib/storage/webview-storage";
+import {
+  saveSearchHistory,
+  setNativeTutorialSeen,
+} from "@/lib/storage/webview-storage";
 import { supabase } from "@/lib/supabase";
 
 export default function HomeScreen() {
@@ -517,6 +520,9 @@ export default function HomeScreen() {
           typeof data.payload.active === "boolean"
         ) {
           setIsTutorialActive(data.payload.active);
+        } else if (data.type === "TUTORIAL_COMPLETED") {
+          // チュートリアル完了通知: 次回起動時に /native-onboarding をスキップさせる
+          void setNativeTutorialSeen(true);
         } else if (data.type === "INITIATE_IAP") {
           // WebView から購入リクエスト: planType が指定されていれば該当パッケージを直接購入、
           // なければ Paywall にフォールバック
