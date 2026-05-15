@@ -14,7 +14,10 @@
       "usesAppleSignIn": true,
       "associatedDomains": ["applinks:www.aikinote.com"],
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "プロフィール画像や稽古記録の写真・動画を撮影するために使用します。",
+        "NSPhotoLibraryUsageDescription": "プロフィール画像や稽古記録に添付する写真・動画を選択するために使用します。",
+        "NSMicrophoneUsageDescription": "稽古記録に添付する動画を撮影する際に音声を録音するために使用します。"
       }
     },
     "android": {
