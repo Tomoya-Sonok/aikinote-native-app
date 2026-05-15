@@ -1,4 +1,4 @@
-# App Store 再提出ノート (Build 26 — クラッシュリジェクト対応)
+# App Store 再提出ノート (Build 27 — クラッシュリジェクト対応)
 
 ## 背景
 
@@ -12,7 +12,7 @@ Build 25 (Version 1.0 build 25) は 2026-05-09 に再提出して 2026-05-11 に
 | 再現手順 | (1) ページ作成 or プロフィール画像編集 → (2) 写真を撮影 |
 | Review Device | iPad Air 11" M3 (iPadOS 26.4.2) + iPhone 17 Pro Max (iOS 26.4.2) |
 
-Build 24 で受けた 3 件のガイドライン (5.1.2 / 1.2 / 2.3.2) は Build 25 で対応済み・引き継ぎ。**Build 26 ではクラッシュのみを追加修正**する。
+Build 24 で受けた 3 件のガイドライン (5.1.2 / 1.2 / 2.3.2) は Build 25 で対応済み・引き継ぎ。**Build 27 ではクラッシュのみを追加修正**する。
 
 ---
 
@@ -26,7 +26,7 @@ aikinote-native-app は Expo WebView ラッパー。カメラ起動はすべて 
 
 ---
 
-## Build 26 で実施した修正
+## Build 27 で実施した修正
 
 ### 1. `app.json` の `ios.infoPlist` に 3 つの description を追加（主因）
 
@@ -51,17 +51,17 @@ Web 版リポジトリ PR: [aikinote#302](https://github.com/Tomoya-Sonok/aikino
 
 ---
 
-## App Review Information → Notes 英文（Build 26 用、本審査）
+## App Review Information → Notes 英文（Build 27 用、本審査）
 
 App Store Connect の **App Review Information → Notes** に貼り付ける。Build 25 の Notes を踏襲しつつ、冒頭にクラッシュ対応を追加。
 
 ```
-This build (1.0 build 26) addresses the crash issue identified during the
+This build (1.0 build 27) addresses the crash issue identified during the
 previous review (Submission ID 2da8a8db-0493-4290-bb79-043514e3324e,
 reviewed 2026-05-11, Guideline 2.1(a) Performance).
 
 ================================================================
-Crash fix (Guideline 2.1(a)) — addressed in Build 26
+Crash fix (Guideline 2.1(a)) — addressed in Build 27
 ================================================================
 
 The previous build (1.0 build 25) crashed when reviewers tapped "Take Photo"
@@ -74,7 +74,7 @@ and our Info.plist (generated from app.json) was missing the required
 privacy usage description keys. iOS therefore terminated the app via SIGABRT
 the moment camera access was requested.
 
-Fix applied in Build 26:
+Fix applied in Build 27:
 
   1. app.json (ios.infoPlist) now declares all three required keys:
        - NSCameraUsageDescription
@@ -123,7 +123,7 @@ Demo account
 To verify the crash is gone:
   1. Sign in with the demo account.
   2. Open "Edit profile" from My Page → tap the profile-image area →
-     "Take Photo". On Build 25 this crashed instantly; on Build 26 the
+     "Take Photo". On Build 25 this crashed instantly; on Build 27 the
      iOS camera permission prompt appears (in Japanese) instead.
   3. Create a new page (Solo → New) → attach photo → "Take Photo".
      Same expected behavior: permission prompt, no crash.
@@ -140,12 +140,12 @@ needed. Thank you again for the careful review.
 ## TestFlight Beta App Review (External) 用の簡略版
 
 ```
-Build 1.0 (26) addresses the crash issue identified in review of build 25
+Build 1.0 (27) addresses the crash issue identified in review of build 25
 (Submission 2da8a8db..., Guideline 2.1(a)).
 
 Root cause: missing privacy usage description keys in Info.plist caused
 iOS to SIGABRT the moment camera access was requested through the in-app
-WebView. Build 26 adds NSCameraUsageDescription, NSPhotoLibraryUsageDescription
+WebView. Build 27 adds NSCameraUsageDescription, NSPhotoLibraryUsageDescription
 and NSMicrophoneUsageDescription, and tightens the profile-image picker's
 accept attribute to exclude HEIC.
 
@@ -161,7 +161,7 @@ Sign-In Information).
 ```bash
 cd /Users/tomoyakonos/projects/aikinote-native-app
 
-# Build 26 (autoIncrement で 25 → 26)
+# Build 27 (autoIncrement で 25 → 26 → 27、Build 26 は ASC 側で重複エラーのため再ビルド)
 EXPO_NO_CAPABILITY_SYNC=1 npx eas-cli build --profile production --platform ios --non-interactive
 
 # Submit (eas.json の production プロファイルに ascAppId 設定済みなので非対話で OK)
@@ -172,10 +172,10 @@ npx eas-cli submit --platform ios --profile production --latest --non-interactiv
 
 ## 提出時のチェックリスト
 
-- [ ] EAS Build #26 が完了して `.ipa` が生成されている
+- [ ] EAS Build #27 が完了して `.ipa` が生成されている
 - [ ] `eas submit` で App Store Connect への Processing が完了している（10〜30 分）
-- [ ] App Store Connect の Build 一覧で `1.0 (26)` が選択可能になっている
-- [ ] Submit する Version を `1.0` の Build 26 に差し替え（差分作業）
+- [ ] App Store Connect の Build 一覧で `1.0 (27)` が選択可能になっている
+- [ ] Submit する Version を `1.0` の Build 27 に差し替え（差分作業）
 - [ ] **App Review Information → Notes** に本ドキュメントの英文 Notes をコピペ
 - [ ] Sign-In Information の Email/Password が `apple-reviewer@aikinote.com` の最新値
 - [ ] スクリーン録画は今回は **任意**（Build 25 の録画があれば流用可能、なくても Notes だけで十分通る見込み）
