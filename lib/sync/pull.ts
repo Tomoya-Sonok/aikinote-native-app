@@ -6,6 +6,7 @@
 //   3. training_pages
 //   4. training_page_tags
 //   5. training_dates
+//   6. page_attachments (training_pages に依存)
 //
 // LWW: lib/sync/lww.ts の shouldOverwriteWithRemote を使う。
 // 削除モデル: **Supabase 側は soft delete を持たず、物理削除のみ** (backend
@@ -21,6 +22,7 @@
 import { randomUUID } from "expo-crypto";
 import type { SQLiteDatabase } from "expo-sqlite";
 import { getDatabase } from "@/lib/db";
+import { upsertAttachmentFromRemote } from "@/lib/db/repositories/page-attachments";
 import type {
   TrainingDateRow,
   TrainingPageRow,
@@ -84,6 +86,20 @@ interface RemoteTrainingDateRow {
   updated_at: string;
 }
 
+interface RemotePageAttachmentRow {
+  id: string;
+  page_id: string;
+  user_id: string;
+  type: "image" | "video" | "youtube";
+  url: string;
+  thumbnail_url: string | null;
+  original_filename: string | null;
+  file_size_bytes: number | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export async function pullAll(ctx: PullContext): Promise<void> {
   const db = await getDatabase();
   await pullCategories(db, ctx);
@@ -91,6 +107,7 @@ export async function pullAll(ctx: PullContext): Promise<void> {
   await pullPages(db, ctx);
   await pullPageTags(db, ctx);
   await pullTrainingDates(db, ctx);
+  await pullAttachments(db, ctx);
 }
 
 // ============================== Categories ==============================
@@ -350,4 +367,98 @@ async function pullTrainingDates(
       local.local_id,
     );
   }
+}
+
+// ============================== Page Attachments ==============================
+
+/**
+ * Supabase の PageAttachment を取得して SQLite に upsert する。
+ * remote_url のみ保存し、ファイル本体のダウンロードは
+ * lib/sync/download.ts (downloadPendingAttachments) が後段で実行する。
+ *
+ * - training_pages の pull より後で実行される (page_local_id 解決のため)
+ * - YouTube タイプは url がそのまま埋まり、download_status は NULL のまま
+ */
+async function pullAttachments(
+  db: SQLiteDatabase,
+  ctx: PullContext,
+): Promise<void> {
+  let query = supabase
+    .from("PageAttachment")
+    .select(
+      "id, page_id, user_id, type, url, thumbnail_url, original_filename, file_size_bytes, sort_order, created_at, updated_at",
+    )
+    .eq("user_id", ctx.userId);
+  if (ctx.since) query = query.gte("updated_at", ctx.since);
+  const { data, error } = await query.returns<RemotePageAttachmentRow[]>();
+  if (error) throw new Error(`pullAttachments: ${error.message}`);
+
+  for (const remote of data ?? []) {
+    // 親ページの local_id を server_id 経由で解決
+    const page = await db.getFirstAsync<{ local_id: string }>(
+      "SELECT local_id FROM training_pages WHERE server_id = ?;",
+      remote.page_id,
+    );
+    if (!page) continue; // 親ページが未 pull の場合はスキップ (次回 pull で拾う)
+
+    // 既存ローカルがあれば LWW で更新可否判定
+    const existing = await db.getFirstAsync<{
+      local_id: string;
+      updated_at: string;
+      sync_status: string;
+    }>(
+      "SELECT local_id, updated_at, sync_status FROM page_attachments WHERE server_id = ?;",
+      remote.id,
+    );
+    if (existing && existing.sync_status !== "synced") continue; // ローカル変更優先
+    if (
+      existing &&
+      !shouldOverwriteWithRemote(
+        { updated_at: existing.updated_at },
+        { updated_at: remote.updated_at },
+      )
+    ) {
+      continue;
+    }
+
+    await upsertAttachmentFromRemote(db, {
+      serverId: remote.id,
+      pageLocalId: page.local_id,
+      type: remote.type,
+      remoteUrl: remote.url,
+      thumbnailUrl: remote.thumbnail_url,
+      originalFilename: remote.original_filename,
+      fileSizeBytes: remote.file_size_bytes,
+      mimeType: inferMimeType(
+        remote.type,
+        remote.original_filename,
+        remote.url,
+      ),
+      sortOrder: remote.sort_order,
+      createdAt: remote.created_at,
+      updatedAt: remote.updated_at,
+    });
+  }
+}
+
+function inferMimeType(
+  type: "image" | "video" | "youtube",
+  filename: string | null,
+  url: string,
+): string | null {
+  if (type === "youtube") return null;
+  const source = filename ?? url;
+  const dot = source.lastIndexOf(".");
+  if (dot < 0) return null;
+  const ext = source
+    .slice(dot + 1)
+    .toLowerCase()
+    .split("?")[0];
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "mp4") return "video/mp4";
+  if (ext === "mov") return "video/quicktime";
+  if (ext === "webm") return "video/webm";
+  return null;
 }

@@ -14,6 +14,7 @@
 
 import { getDatabase } from "@/lib/db";
 import { getMeta, setMeta } from "@/lib/db/repositories/sync-meta";
+import { downloadPendingAttachments } from "./download";
 import { pullAll } from "./pull";
 import { pushAll } from "./push";
 import { countPending } from "./queue";
@@ -73,6 +74,17 @@ export function triggerPushSync(): void {
 }
 
 /**
+ * リモート添付ファイルのローカルダウンロードをバックグラウンドで進める。
+ * 既に実行中なら no-op (downloadPendingAttachments 内で isRunning ガード)。
+ * Pull 完了後と、必要に応じて UI からのアクセス時に呼ぶ。
+ */
+export function triggerDownloadSync(): void {
+  void downloadPendingAttachments().catch((error) => {
+    console.error("[sync.engine] download で予期せぬエラー:", error);
+  });
+}
+
+/**
  * 同期を実行する。既に同期実行中の場合は新たに開始せず、その Promise を返す。
  */
 export function runSync(scope: SyncScope, options: SyncOptions): Promise<void> {
@@ -116,6 +128,13 @@ async function doSync(scope: SyncScope, options: SyncOptions): Promise<void> {
 
   if (scope === "full") {
     await setMeta(db, "initial_sync_done", "true");
+  }
+
+  // pull で追加された pending 添付をバックグラウンドでダウンロード開始。
+  // Pull 完了通知はファイル DL を待たずに行われるので、UI はメタが揃った時点で
+  // 既存添付（local_uri 未確定）を表示可能で、ファイル到着次第順次描画される。
+  if (scope === "full" || scope === "incremental") {
+    triggerDownloadSync();
   }
 }
 
