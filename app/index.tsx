@@ -39,7 +39,11 @@ import {
   setNativeTutorialSeen,
 } from "@/lib/storage/webview-storage";
 import { supabase } from "@/lib/supabase";
-import { runSync, setSyncUserId } from "@/lib/sync/engine";
+import {
+  runSync,
+  setSyncStatusReporter,
+  setSyncUserId,
+} from "@/lib/sync/engine";
 
 export default function HomeScreen() {
   const {
@@ -632,9 +636,8 @@ export default function HomeScreen() {
   }, [userId, identify, webView.executeScript]);
 
   // 同期エンジンの配線:
-  //   - userId 取得後にアプリ起動相当の full sync を 1 回キック
+  //   - userId 取得後にアプリ起動相当の full sync を 1 回キック (Pull + Push)
   //   - 5 分おきの定期 push-only sync
-  // Pull は PR6 (初回フルプル) で実装、現状 full でも実質 push-only と同等。
   const syncStartedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!userId) {
@@ -654,6 +657,18 @@ export default function HomeScreen() {
     );
     return () => clearInterval(intervalId);
   }, [userId]);
+
+  // sync 進捗 (PERSONAL_SYNC_STATUS) を Web 側に back-channel で通知。
+  // Web の SyncStatusBanner が受け取って進捗を表示する。
+  useEffect(() => {
+    setSyncStatusReporter((status) => {
+      sendToWebView(
+        "PERSONAL_SYNC_STATUS",
+        status as unknown as Record<string, unknown>,
+      );
+    });
+    return () => setSyncStatusReporter(null);
+  }, [sendToWebView]);
 
   // NetInfo: 接続が false → true に遷移したら incremental sync をキック
   const lastIsConnectedRef = useRef<boolean | null>(null);
