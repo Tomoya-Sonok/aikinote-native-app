@@ -22,6 +22,10 @@ import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikinoteWebView } from "@/components/webview/aikinote-webview";
 import { useWebView } from "@/hooks/use-webview";
 import {
+  handlePersonalBridgeMessage,
+  isPersonalBridgeMessage,
+} from "@/lib/bridge/personal-handlers";
+import {
   buildLocalePath,
   getActiveTab,
   getHeaderType,
@@ -549,6 +553,11 @@ export default function HomeScreen() {
         ) {
           // WebView から OAuth リクエスト（Google / Apple）
           handleNativeOAuth(data.payload.provider);
+        } else if (isPersonalBridgeMessage(data.type)) {
+          // 「ひとりで」(personal pages) のオフラインファースト用ブリッジ。
+          // 仕様: docs/webview-bridge-protocol.md
+          // 本 PR では skeleton で NOT_IMPLEMENTED を返す。
+          void handlePersonalBridgeMessage(data, sendToWebView);
         }
       } catch {
         // パースエラーは無視
