@@ -565,11 +565,19 @@ function optionalSortOrder(
   return value;
 }
 
+/**
+ * カテゴリ名から slug を生成する。
+ *
+ * 第一段の正規表現は「半角英小文字 / 半角数字 / ひらがな・カタカナ
+ * (U+3040〜U+30FF) / 一般的な CJK 統合漢字 (U+4E00〜U+9FFF)」**以外**の
+ * 連続を 1 個のハイフンに置換する。範囲指定は生文字ではなく \uXXXX で
+ * 書くことでエディタのフォントや改行コードに依存せず安全に保てる。
+ */
 function slugify(name: string): string {
   return (
     name
       .toLowerCase()
-      .replace(/[^a-z0-9぀-ヿ一-鿿]+/g, "-")
+      .replace(/[^a-z0-9\u3040-\u30FF\u4E00-\u9FFF]+/g, "-")
       .replace(/^-+|-+$/g, "") || "category"
   );
 }
