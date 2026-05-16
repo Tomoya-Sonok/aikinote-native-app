@@ -39,6 +39,7 @@ import {
   setNativeTutorialSeen,
 } from "@/lib/storage/webview-storage";
 import { supabase } from "@/lib/supabase";
+import { runSync, setSyncUserId } from "@/lib/sync/engine";
 
 export default function HomeScreen() {
   const {
@@ -497,6 +498,8 @@ export default function HomeScreen() {
           const newUserId = data.payload.userId ?? null;
           setProfileImageUrl(data.payload.profileImageUrl ?? null);
           setUserId(newUserId);
+          // sync engine に userId を登録 / 解除
+          setSyncUserId(newUserId);
 
           // ログアウト検知（userId が null に変化）→ プッシュトークン削除
           if (!newUserId && pushTokenRef.current) {
@@ -603,6 +606,42 @@ export default function HomeScreen() {
       });
     }
   }, [userId, identify, webView.executeScript]);
+
+  // 同期エンジンの配線:
+  //   - userId 取得後にアプリ起動相当の full sync を 1 回キック
+  //   - 5 分おきの定期 push-only sync
+  // Pull は PR6 (初回フルプル) で実装、現状 full でも実質 push-only と同等。
+  const syncStartedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!userId) {
+      syncStartedRef.current = null;
+      return;
+    }
+    if (syncStartedRef.current === userId) return;
+    syncStartedRef.current = userId;
+
+    void runSync("full", { userId });
+
+    const intervalId = setInterval(
+      () => {
+        void runSync("push-only", { userId });
+      },
+      5 * 60 * 1000,
+    );
+    return () => clearInterval(intervalId);
+  }, [userId]);
+
+  // NetInfo: 接続が false → true に遷移したら incremental sync をキック
+  const lastIsConnectedRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const wasConnected = lastIsConnectedRef.current;
+    const isConnectedNow = netInfo.isConnected;
+    lastIsConnectedRef.current = isConnectedNow ?? null;
+    if (!userId) return;
+    if (wasConnected === false && isConnectedNow === true) {
+      void runSync("incremental", { userId });
+    }
+  }, [netInfo.isConnected, userId]);
 
   // WebView に Premium 状態を通知
   const webViewRef = webView.ref;
