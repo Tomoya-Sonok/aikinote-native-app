@@ -510,6 +510,13 @@ export default function HomeScreen() {
           // Native の Supabase クライアントが RLS 越しに sync 可能になる。
           // 旧版 Web (token フィールド未送信) との互換性のため、token が
           // 揃っていない場合は何もしない。
+          //
+          // ⚠️ ログアウト時に supabase.auth.signOut() を呼ばないこと。
+          // Supabase JS のデフォルトは scope: 'global' で、サーバー側で
+          // refresh_token を invalidate するため、Web 側 (WebView の cookie)
+          // の session も巻き添えで失効して強制ログアウトに至る。Native の
+          // Supabase クライアントは次回 USER_INFO で setSession が上書きする
+          // ため、明示的なクリアは不要。
           const accessToken = data.payload.accessToken ?? null;
           const refreshToken = data.payload.refreshToken ?? null;
           if (newUserId && accessToken && refreshToken) {
@@ -524,9 +531,6 @@ export default function HomeScreen() {
                   error,
                 );
               });
-          } else if (!newUserId) {
-            // ログアウト時はセッションも破棄
-            supabase.auth.signOut().catch(() => {});
           }
 
           // ログアウト検知（userId が null に変化）→ プッシュトークン削除
