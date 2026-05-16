@@ -8,9 +8,11 @@
 
 import type { SQLiteDatabase } from "expo-sqlite";
 import { MIGRATION_001_INIT } from "./migrations/001_init";
+import { MIGRATION_002_ATTACHMENTS_OFFLINE } from "./migrations/002_attachments_offline";
 
 const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
   { version: 1, sql: MIGRATION_001_INIT },
+  { version: 2, sql: MIGRATION_002_ATTACHMENTS_OFFLINE },
 ];
 
 /**

@@ -64,6 +64,7 @@ export async function pushPendingAttachments(): Promise<void> {
         originalFilename: row.original_filename ?? "",
         fileSize: row.file_size_bytes ?? 0,
         mimeType: row.mime_type ?? "image/jpeg",
+        attachmentType: row.type === "video" ? "video" : "image",
       });
       await markUploadSucceeded(db, row.local_id, remoteUrl);
     } catch (error) {
@@ -112,6 +113,7 @@ async function uploadAndRegister(
     originalFilename: string;
     fileSize: number;
     mimeType: string;
+    attachmentType: "image" | "video";
   },
 ): Promise<string> {
   // FS から PUT。expo-file-system/legacy の uploadAsync を使う
@@ -138,7 +140,7 @@ async function uploadAndRegister(
     },
     body: JSON.stringify({
       page_id: meta.pageLocalId, // sync で page も同期済みの想定 (server_id == local_id)
-      type: "image",
+      type: meta.attachmentType,
       url: remoteUrl,
       original_filename: meta.originalFilename,
       file_size_bytes: meta.fileSize,

@@ -15,6 +15,12 @@ export type SyncStatus =
 
 export type UploadStatus = "pending" | "uploading" | "uploaded" | "failed";
 
+export type DownloadStatus =
+  | "pending"
+  | "downloading"
+  | "downloaded"
+  | "failed";
+
 export interface TrainingPageRow {
   local_id: string;
   server_id: string | null;
@@ -72,7 +78,7 @@ export interface PageAttachmentRow {
   local_id: string;
   server_id: string | null;
   page_local_id: string;
-  type: "image" | "video";
+  type: "image" | "video" | "youtube";
   local_uri: string | null;
   remote_url: string | null;
   thumbnail_url: string | null;
@@ -83,6 +89,11 @@ export interface PageAttachmentRow {
   upload_status: UploadStatus;
   upload_retry_count: number;
   upload_error: string | null;
+  // migration 002: リモート由来ファイル本体のローカルダウンロード管理
+  download_status: DownloadStatus | null;
+  download_retry_count: number;
+  download_error: string | null;
+  last_accessed_at: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

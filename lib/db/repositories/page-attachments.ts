@@ -1,18 +1,19 @@
 // page_attachments テーブルの CRUD + Native File System 連携。
 //
-// 画像はオフラインで Native FS の documentDirectory/attachments/<uuid>.<ext>
-// に保存し、SQLite には local_uri (file://) を持つ。ネット接続時に
-// lib/sync/attachments.ts が S3 にアップロードして remote_url を埋める。
-// 動画はオフライン対象外 (Web 側で accept から除外済み)。
+// 画像・動画はオフラインで Native FS の documentDirectory/attachments/<uuid>.<ext>
+// に保存し、SQLite には local_uri (file://) を持つ。
+// - ネイティブキャプチャ: ローカル保存 → lib/sync/attachments.ts が S3 にアップロード
+// - リモート(Web版で添付済み): lib/sync/download.ts が CloudFront からダウンロード
+//   して local_uri を埋める
 
 import { randomUUID } from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 import type { SQLiteDatabase } from "expo-sqlite";
 import type { PageAttachmentRow } from "../schema";
 
-const ATTACHMENTS_DIR = `${FileSystem.documentDirectory}attachments/`;
+export const ATTACHMENTS_DIR = `${FileSystem.documentDirectory}attachments/`;
 
-async function ensureAttachmentsDir(): Promise<void> {
+export async function ensureAttachmentsDir(): Promise<void> {
   const info = await FileSystem.getInfoAsync(ATTACHMENTS_DIR);
   if (!info.exists) {
     await FileSystem.makeDirectoryAsync(ATTACHMENTS_DIR, {
@@ -96,7 +97,8 @@ export async function listAttachmentsForPage(
 
 /**
  * Soft delete + ローカルファイル削除。
- * remote_url がある (S3 にアップ済み) ならファイルは保持し、sync で S3 削除を担当する。
+ * pending_create は物理削除、それ以外は soft delete (pending_delete) で同期側に委ねる。
+ * downloaded 済みのキャッシュファイルは即時開放する (再アクセスで再ダウンロード)。
  */
 export async function softDeleteAttachment(
   db: SQLiteDatabase,
@@ -120,6 +122,12 @@ export async function softDeleteAttachment(
       localId,
     );
     return true;
+  }
+
+  // リモート由来でキャッシュ済みのファイルは soft delete と同時に物理削除して容量開放
+  // (S3 側の削除は同期で別途処理されるか、リモート側で既に消えている場合がある)
+  if (existing.download_status === "downloaded" && existing.local_uri) {
+    await deleteLocalFile(existing.local_uri);
   }
 
   await db.runAsync(
@@ -192,15 +200,268 @@ async function deleteLocalFile(uri: string): Promise<void> {
   }
 }
 
-function pickExtension(mimeType: string, filename: string): string {
-  // mimeType を優先、無ければファイル名末尾を使う
-  if (mimeType === "image/jpeg" || mimeType === "image/jpg") return "jpg";
-  if (mimeType === "image/png") return "png";
-  if (mimeType === "image/webp") return "webp";
-  const dotIdx = filename.lastIndexOf(".");
-  if (dotIdx >= 0) {
-    const ext = filename.slice(dotIdx + 1).toLowerCase();
-    if (/^[a-z0-9]{1,5}$/.test(ext)) return ext;
+export function pickExtension(
+  mimeType: string | null,
+  filename?: string | null,
+): string {
+  // mimeType を優先、無ければファイル名末尾、それも無ければ bin
+  if (mimeType) {
+    if (mimeType === "image/jpeg" || mimeType === "image/jpg") return "jpg";
+    if (mimeType === "image/png") return "png";
+    if (mimeType === "image/webp") return "webp";
+    if (mimeType === "video/mp4") return "mp4";
+    if (mimeType === "video/quicktime") return "mov";
+    if (mimeType === "video/webm") return "webm";
+  }
+  if (filename) {
+    const dotIdx = filename.lastIndexOf(".");
+    if (dotIdx >= 0) {
+      const ext = filename.slice(dotIdx + 1).toLowerCase();
+      if (/^[a-z0-9]{1,5}$/.test(ext)) return ext;
+    }
   }
   return "bin";
+}
+
+// ============================================================
+// migration 002: リモート由来添付ファイルのダウンロード管理 / LRU
+// ============================================================
+
+export interface RemoteAttachmentUpsertInput {
+  serverId: string;
+  pageLocalId: string;
+  type: "image" | "video" | "youtube";
+  remoteUrl: string;
+  thumbnailUrl: string | null;
+  originalFilename: string | null;
+  fileSizeBytes: number | null;
+  mimeType: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Pull で取得したリモート添付を SQLite に upsert する。
+ * - 新規行は upload_status='uploaded' / sync_status='synced' で挿入
+ * - YouTube タイプはダウンロード対象外 (download_status は NULL のまま)
+ * - 画像/動画は download_status='pending' をセット (既に 'downloaded' なら維持)
+ * 戻り値: upsert された行の local_id
+ */
+export async function upsertAttachmentFromRemote(
+  db: SQLiteDatabase,
+  input: RemoteAttachmentUpsertInput,
+): Promise<string> {
+  const existing = await db.getFirstAsync<PageAttachmentRow>(
+    "SELECT * FROM page_attachments WHERE server_id = ?;",
+    input.serverId,
+  );
+
+  if (existing) {
+    // 既存行: メタ情報を更新 (local_uri / download_status はキャッシュ状態に応じて保護)
+    const shouldKeepDownloaded =
+      existing.download_status === "downloaded" && existing.local_uri !== null;
+    const newDownloadStatus =
+      input.type === "youtube"
+        ? null
+        : shouldKeepDownloaded
+          ? existing.download_status
+          : "pending";
+    await db.runAsync(
+      `UPDATE page_attachments
+       SET page_local_id = ?, type = ?, remote_url = ?, thumbnail_url = ?,
+           original_filename = ?, file_size_bytes = ?, mime_type = ?,
+           sort_order = ?, upload_status = 'uploaded', upload_error = NULL,
+           download_status = ?, updated_at = ?, sync_status = 'synced'
+       WHERE local_id = ?;`,
+      input.pageLocalId,
+      input.type,
+      input.remoteUrl,
+      input.thumbnailUrl,
+      input.originalFilename,
+      input.fileSizeBytes,
+      input.mimeType,
+      input.sortOrder,
+      newDownloadStatus,
+      input.updatedAt,
+      existing.local_id,
+    );
+    return existing.local_id;
+  }
+
+  const localId = randomUUID();
+  const downloadStatus = input.type === "youtube" ? null : "pending";
+  await db.runAsync(
+    `INSERT INTO page_attachments
+       (local_id, server_id, page_local_id, type, local_uri, remote_url,
+        thumbnail_url, original_filename, file_size_bytes, mime_type,
+        sort_order, upload_status, upload_retry_count, upload_error,
+        download_status, download_retry_count, download_error, last_accessed_at,
+        created_at, updated_at, deleted_at, sync_status)
+     VALUES (?, ?, ?, ?, NULL, ?,
+             ?, ?, ?, ?,
+             ?, 'uploaded', 0, NULL,
+             ?, 0, NULL, NULL,
+             ?, ?, NULL, 'synced');`,
+    localId,
+    input.serverId,
+    input.pageLocalId,
+    input.type,
+    input.remoteUrl,
+    input.thumbnailUrl,
+    input.originalFilename,
+    input.fileSizeBytes,
+    input.mimeType,
+    input.sortOrder,
+    downloadStatus,
+    input.createdAt,
+    input.updatedAt,
+  );
+  return localId;
+}
+
+/**
+ * ダウンロードを試みるべき添付一覧。
+ * - リモート URL があり、まだローカルキャッシュが無い (or 失敗) もの
+ * - YouTube タイプは含まない (download_status NULL でフィルタ)
+ */
+export async function listAttachmentsNeedingDownload(
+  db: SQLiteDatabase,
+): Promise<PageAttachmentRow[]> {
+  return db.getAllAsync<PageAttachmentRow>(
+    `SELECT * FROM page_attachments
+     WHERE deleted_at IS NULL
+       AND remote_url IS NOT NULL
+       AND type IN ('image', 'video')
+       AND (download_status IN ('pending', 'failed')
+            OR (download_status IS NULL AND local_uri IS NULL))
+     ORDER BY created_at DESC;`,
+  );
+}
+
+export async function markDownloadStarted(
+  db: SQLiteDatabase,
+  localId: string,
+): Promise<void> {
+  await db.runAsync(
+    `UPDATE page_attachments
+     SET download_status = 'downloading', download_error = NULL
+     WHERE local_id = ?;`,
+    localId,
+  );
+}
+
+export async function markDownloadSucceeded(
+  db: SQLiteDatabase,
+  localId: string,
+  localUri: string,
+  fileSizeBytes: number | null,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db.runAsync(
+    `UPDATE page_attachments
+     SET local_uri = ?, file_size_bytes = COALESCE(?, file_size_bytes),
+         download_status = 'downloaded', download_error = NULL,
+         download_retry_count = 0, last_accessed_at = ?
+     WHERE local_id = ?;`,
+    localUri,
+    fileSizeBytes,
+    now,
+    localId,
+  );
+}
+
+export async function markDownloadFailed(
+  db: SQLiteDatabase,
+  localId: string,
+  message: string,
+): Promise<void> {
+  await db.runAsync(
+    `UPDATE page_attachments
+     SET download_status = 'failed',
+         download_retry_count = download_retry_count + 1,
+         download_error = ?
+     WHERE local_id = ?;`,
+    message,
+    localId,
+  );
+}
+
+/**
+ * 読み出し時に last_accessed_at を更新する (LRU 用)。
+ * 高頻度に呼ばれるので失敗時は無視。
+ */
+export async function touchAccessed(
+  db: SQLiteDatabase,
+  localId: string,
+): Promise<void> {
+  try {
+    await db.runAsync(
+      "UPDATE page_attachments SET last_accessed_at = ? WHERE local_id = ?;",
+      new Date().toISOString(),
+      localId,
+    );
+  } catch (error) {
+    console.warn("[page-attachments] touchAccessed failed:", error);
+  }
+}
+
+/**
+ * ダウンロード済みファイルの合計サイズ (バイト)。LRU 判定に使う。
+ */
+export async function getTotalDownloadedSize(
+  db: SQLiteDatabase,
+): Promise<number> {
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT COALESCE(SUM(file_size_bytes), 0) AS total
+     FROM page_attachments
+     WHERE download_status = 'downloaded' AND local_uri IS NOT NULL;`,
+  );
+  return row?.total ?? 0;
+}
+
+/**
+ * LRU で削除すべき候補を last_accessed_at 昇順で取得。
+ * neededBytes 分のサイズが集まるまで返す。
+ */
+export async function listLruEvictionCandidates(
+  db: SQLiteDatabase,
+  neededBytes: number,
+): Promise<PageAttachmentRow[]> {
+  const all = await db.getAllAsync<PageAttachmentRow>(
+    `SELECT * FROM page_attachments
+     WHERE download_status = 'downloaded' AND local_uri IS NOT NULL
+       AND deleted_at IS NULL
+     ORDER BY COALESCE(last_accessed_at, created_at) ASC;`,
+  );
+  const result: PageAttachmentRow[] = [];
+  let accumulated = 0;
+  for (const row of all) {
+    if (accumulated >= neededBytes) break;
+    result.push(row);
+    accumulated += row.file_size_bytes ?? 0;
+  }
+  return result;
+}
+
+/**
+ * 1 件をローカルキャッシュから削除する (DB 上は残し、再アクセスで再ダウンロード)。
+ */
+export async function evictAttachment(
+  db: SQLiteDatabase,
+  localId: string,
+): Promise<void> {
+  const existing = await db.getFirstAsync<PageAttachmentRow>(
+    "SELECT local_uri FROM page_attachments WHERE local_id = ?;",
+    localId,
+  );
+  if (existing?.local_uri) {
+    await deleteLocalFile(existing.local_uri);
+  }
+  await db.runAsync(
+    `UPDATE page_attachments
+     SET local_uri = NULL, download_status = 'pending'
+     WHERE local_id = ?;`,
+    localId,
+  );
 }
