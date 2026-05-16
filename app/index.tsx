@@ -501,6 +501,30 @@ export default function HomeScreen() {
           // sync engine に userId を登録 / 解除
           setSyncUserId(newUserId);
 
+          // Web 側から auth セッションも届く (PR4 系列の同期エンジン用)。
+          // 受信した access_token を supabase.auth.setSession に渡して、
+          // Native の Supabase クライアントが RLS 越しに sync 可能になる。
+          // 旧版 Web (token フィールド未送信) との互換性のため、token が
+          // 揃っていない場合は何もしない。
+          const accessToken = data.payload.accessToken ?? null;
+          const refreshToken = data.payload.refreshToken ?? null;
+          if (newUserId && accessToken && refreshToken) {
+            supabase.auth
+              .setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              })
+              .catch((error) => {
+                console.warn(
+                  "[USER_INFO] supabase.auth.setSession に失敗:",
+                  error,
+                );
+              });
+          } else if (!newUserId) {
+            // ログアウト時はセッションも破棄
+            supabase.auth.signOut().catch(() => {});
+          }
+
           // ログアウト検知（userId が null に変化）→ プッシュトークン削除
           if (!newUserId && pushTokenRef.current) {
             webView.executeScript(`
