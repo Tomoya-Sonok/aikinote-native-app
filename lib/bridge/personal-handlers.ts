@@ -39,6 +39,12 @@ import {
   softDeleteTrainingDate,
   upsertTrainingDate,
 } from "@/lib/db/repositories/training-dates";
+import {
+  getSyncUserId,
+  runSync,
+  type SyncScope,
+  triggerPushSync,
+} from "@/lib/sync/engine";
 
 type SendToWebView = (type: string, payload: Record<string, unknown>) => void;
 
@@ -67,7 +73,23 @@ const NOT_IMPLEMENTED_TYPES = new Set<string>([
   "PERSONAL_ATTACHMENTS_LIST",
   "PERSONAL_ATTACHMENTS_CREATE",
   "PERSONAL_ATTACHMENTS_DELETE",
-  "PERSONAL_SYNC_TRIGGER",
+]);
+
+// mutation 系のメッセージタイプ。成功後に push-only sync を非同期キックする
+// (ユーザー操作直後にサーバーへ反映する目的、UI は待たない)。
+const MUTATION_TYPES = new Set<string>([
+  "PERSONAL_PAGES_CREATE",
+  "PERSONAL_PAGES_UPDATE",
+  "PERSONAL_PAGES_DELETE",
+  "PERSONAL_PAGES_TOGGLE_VISIBILITY",
+  "PERSONAL_TAGS_CREATE",
+  "PERSONAL_TAGS_DELETE",
+  "PERSONAL_TAGS_UPDATE_ORDER",
+  "PERSONAL_CATEGORIES_CREATE",
+  "PERSONAL_CATEGORIES_UPDATE",
+  "PERSONAL_CATEGORIES_DELETE",
+  "PERSONAL_TRAINING_DATES_UPSERT",
+  "PERSONAL_TRAINING_DATES_REMOVE",
 ]);
 
 /**
@@ -105,6 +127,10 @@ export async function handlePersonalBridgeMessage(
   try {
     const data = await dispatch(type, payload ?? {});
     sendToWebView(resultType, { requestId, ok: true, data });
+    // mutation 成功時は push-only sync を非同期キック (UI は待たない)
+    if (MUTATION_TYPES.has(type)) {
+      triggerPushSync();
+    }
   } catch (error) {
     if (error instanceof BridgeHandlerError) {
       sendToWebView(resultType, {
@@ -179,6 +205,8 @@ async function dispatch(
       return handleTrainingDatesUpsert(payload);
     case "PERSONAL_TRAINING_DATES_REMOVE":
       return handleTrainingDatesRemove(payload);
+    case "PERSONAL_SYNC_TRIGGER":
+      return handleSyncTrigger(payload);
     default:
       throw new BridgeHandlerError(
         "UNKNOWN_TYPE",
@@ -463,6 +491,22 @@ async function handleTrainingDatesRemove(payload: Record<string, unknown>) {
   return {};
 }
 
+// ============================== Sync ==============================
+
+async function handleSyncTrigger(payload: Record<string, unknown>) {
+  const scope = optionalSyncScope(payload, "scope") ?? "push-only";
+  const userId = getSyncUserId();
+  if (!userId) {
+    throw new BridgeHandlerError(
+      "VALIDATION_ERROR",
+      "sync user id is not registered yet (waiting for USER_INFO message).",
+    );
+  }
+  // 同期は非同期キック。レスポンスは即返す
+  void runSync(scope, { userId });
+  return { triggered: true, scope };
+}
+
 // ============================== Helpers ==============================
 
 function requireString(payload: Record<string, unknown>, key: string): string {
@@ -560,6 +604,21 @@ function optionalSortOrder(
     throw new BridgeHandlerError(
       "VALIDATION_ERROR",
       `${key} must be "newest" or "oldest" when provided.`,
+    );
+  }
+  return value;
+}
+
+function optionalSyncScope(
+  payload: Record<string, unknown>,
+  key: string,
+): SyncScope | undefined {
+  const value = payload[key];
+  if (value === undefined || value === null) return undefined;
+  if (value !== "full" && value !== "incremental" && value !== "push-only") {
+    throw new BridgeHandlerError(
+      "VALIDATION_ERROR",
+      `${key} must be "full" | "incremental" | "push-only" when provided.`,
     );
   }
   return value;
