@@ -17,6 +17,11 @@ import {
   updateCategory,
 } from "@/lib/db/repositories/categories";
 import {
+  createImageAttachmentFromBase64,
+  listAttachmentsForPage,
+  softDeleteAttachment,
+} from "@/lib/db/repositories/page-attachments";
+import {
   listTagsForPage,
   replacePageTags,
 } from "@/lib/db/repositories/page-tags";
@@ -70,9 +75,8 @@ export function isPersonalBridgeMessage(type: unknown): type is string {
 }
 
 const NOT_IMPLEMENTED_TYPES = new Set<string>([
-  "PERSONAL_ATTACHMENTS_LIST",
-  "PERSONAL_ATTACHMENTS_CREATE",
-  "PERSONAL_ATTACHMENTS_DELETE",
+  // PR5 ですべての PERSONAL_ATTACHMENTS_* を実装したため空。
+  // 将来別の未実装メッセージタイプが増えた時のためにセット構造は残す。
 ]);
 
 // mutation 系のメッセージタイプ。成功後に push-only sync を非同期キックする
@@ -90,6 +94,8 @@ const MUTATION_TYPES = new Set<string>([
   "PERSONAL_CATEGORIES_DELETE",
   "PERSONAL_TRAINING_DATES_UPSERT",
   "PERSONAL_TRAINING_DATES_REMOVE",
+  "PERSONAL_ATTACHMENTS_CREATE",
+  "PERSONAL_ATTACHMENTS_DELETE",
 ]);
 
 /**
@@ -205,6 +211,12 @@ async function dispatch(
       return handleTrainingDatesUpsert(payload);
     case "PERSONAL_TRAINING_DATES_REMOVE":
       return handleTrainingDatesRemove(payload);
+    case "PERSONAL_ATTACHMENTS_LIST":
+      return handleAttachmentsList(payload);
+    case "PERSONAL_ATTACHMENTS_CREATE":
+      return handleAttachmentsCreate(payload);
+    case "PERSONAL_ATTACHMENTS_DELETE":
+      return handleAttachmentsDelete(payload);
     case "PERSONAL_SYNC_TRIGGER":
       return handleSyncTrigger(payload);
     default:
@@ -486,6 +498,77 @@ async function handleTrainingDatesRemove(payload: Record<string, unknown>) {
     throw new BridgeHandlerError(
       "NOT_FOUND",
       `TrainingDate not found: ${trainingDate}`,
+    );
+  }
+  return {};
+}
+
+// ============================== Attachments ==============================
+
+const ATTACHMENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const ATTACHMENT_MAX_COUNT_PER_PAGE = 5;
+const ALLOWED_IMAGE_MIMES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+]);
+
+async function handleAttachmentsList(payload: Record<string, unknown>) {
+  const pageLocalId = requireString(payload, "pageLocalId");
+  const db = await getDatabase();
+  return listAttachmentsForPage(db, pageLocalId);
+}
+
+async function handleAttachmentsCreate(payload: Record<string, unknown>) {
+  const pageLocalId = requireString(payload, "pageLocalId");
+  const base64 = requireString(payload, "base64");
+  const mimeType = requireString(payload, "mimeType");
+  const filename = requireString(payload, "filename");
+  const sizeBytes = optionalNumber(payload, "sizeBytes") ?? 0;
+  const sortOrder = optionalNumber(payload, "sortOrder");
+
+  if (!ALLOWED_IMAGE_MIMES.has(mimeType.toLowerCase())) {
+    throw new BridgeHandlerError(
+      "VALIDATION_ERROR",
+      `mimeType must be one of ${[...ALLOWED_IMAGE_MIMES].join(", ")}`,
+    );
+  }
+  if (sizeBytes > ATTACHMENT_IMAGE_MAX_BYTES) {
+    throw new BridgeHandlerError(
+      "LIMIT_EXCEEDED",
+      `image size exceeds ${ATTACHMENT_IMAGE_MAX_BYTES} bytes.`,
+    );
+  }
+
+  const db = await getDatabase();
+  const existing = await listAttachmentsForPage(db, pageLocalId);
+  if (existing.length >= ATTACHMENT_MAX_COUNT_PER_PAGE) {
+    throw new BridgeHandlerError(
+      "LIMIT_EXCEEDED",
+      `attachments per page must be ${ATTACHMENT_MAX_COUNT_PER_PAGE} or less.`,
+    );
+  }
+
+  const row = await createImageAttachmentFromBase64(db, {
+    pageLocalId,
+    base64,
+    mimeType,
+    filename,
+    sizeBytes,
+    sortOrder,
+  });
+  return { localId: row.local_id, localUri: row.local_uri };
+}
+
+async function handleAttachmentsDelete(payload: Record<string, unknown>) {
+  const attachmentId = requireString(payload, "attachmentId");
+  const db = await getDatabase();
+  const ok = await softDeleteAttachment(db, attachmentId);
+  if (!ok) {
+    throw new BridgeHandlerError(
+      "NOT_FOUND",
+      `Attachment not found: ${attachmentId}`,
     );
   }
   return {};

@@ -20,6 +20,7 @@ import type {
   UserTagRow,
 } from "@/lib/db/schema";
 import { supabase } from "@/lib/supabase";
+import { pushPendingAttachments } from "./attachments";
 import { markRowSyncError, markRowSynced, purgeRow } from "./queue";
 
 export interface PushContext {
@@ -36,6 +37,9 @@ export async function pushAll(ctx: PushContext): Promise<void> {
   await pushPages(db, ctx);
   await pushPageTags(db);
   await pushTrainingDates(db, ctx);
+  // 画像添付の S3 アップロードキューも消化する (Page と紐付け済み前提なので
+  // pushPages の後に呼ぶ)
+  await pushPendingAttachments();
 }
 
 // ============================== Categories ==============================

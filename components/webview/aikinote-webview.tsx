@@ -322,6 +322,11 @@ export function AikinoteWebView({
       allowsInlineMediaPlayback={true}
       mediaPlaybackRequiresUserAction={false}
       startInLoadingState={false}
+      // 「ひとりで」の画像オフライン対応 (PR5): Native FS に保存した
+      // file:// パスを <img src> から読めるよう許可する。
+      allowFileAccess={true}
+      allowFileAccessFromFileURLs={true}
+      allowUniversalAccessFromFileURLs={true}
       // JS インジェクション（CSS 非表示 + localStorage 復元 + 変更監視）
       injectedJavaScriptBeforeContentLoaded={buildBeforeContentLoadedJS(
         searchHistoryJson,
