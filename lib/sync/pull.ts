@@ -8,8 +8,11 @@
 //   5. training_dates
 //
 // LWW: lib/sync/lww.ts の shouldOverwriteWithRemote を使う。
-// soft delete: remote.deleted_at !== null ならローカルにも反映、
-// ただし pending_delete のローカル行は次回 Push で処理されるので尊重する。
+// 削除モデル: **Supabase 側は soft delete を持たず、物理削除のみ** (backend
+// migrations に deleted_at カラムは存在しない)。push.ts 側で
+// pending_delete を Supabase で DELETE して purgeRow している設計と整合。
+// したがって本 Pull では deleted_at を SELECT せず、ローカル
+// SQLite の deleted_at は常に NULL でセットする。
 //
 // 認証: USER_INFO 経由で supabase.auth.setSession 済みの前提。
 // それ以外の場合は Supabase が 401 を返し、本関数は例外を投げる
@@ -42,7 +45,6 @@ interface RemoteCategoryRow {
   is_default: boolean;
   created_at: string;
   updated_at: string;
-  deleted_at: string | null;
 }
 
 interface RemoteTagRow {
@@ -53,7 +55,6 @@ interface RemoteTagRow {
   sort_order: number;
   created_at: string;
   updated_at: string;
-  deleted_at: string | null;
 }
 
 interface RemotePageRow {
@@ -64,7 +65,6 @@ interface RemotePageRow {
   is_public: boolean;
   created_at: string;
   updated_at: string;
-  deleted_at: string | null;
 }
 
 interface RemotePageTagRow {
@@ -73,7 +73,6 @@ interface RemotePageTagRow {
   user_tag_id: string;
   created_at: string;
   updated_at: string;
-  deleted_at: string | null;
 }
 
 interface RemoteTrainingDateRow {
@@ -83,7 +82,6 @@ interface RemoteTrainingDateRow {
   is_attended: boolean;
   created_at: string;
   updated_at: string;
-  deleted_at: string | null;
 }
 
 export async function pullAll(ctx: PullContext): Promise<void> {
@@ -104,7 +102,7 @@ async function pullCategories(
   let query = supabase
     .from("UserCategory")
     .select(
-      "id, user_id, name, slug, sort_order, is_default, created_at, updated_at, deleted_at",
+      "id, user_id, name, slug, sort_order, is_default, created_at, updated_at",
     )
     .eq("user_id", ctx.userId);
   if (ctx.since) query = query.gte("updated_at", ctx.since);
@@ -121,8 +119,8 @@ async function pullCategories(
       await db.runAsync(
         `INSERT OR IGNORE INTO user_categories
            (local_id, server_id, user_id, name, slug, sort_order, is_default,
-            created_at, updated_at, deleted_at, sync_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced');`,
+            created_at, updated_at, sync_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced');`,
         localId,
         remote.id,
         remote.user_id,
@@ -132,7 +130,6 @@ async function pullCategories(
         remote.is_default ? 1 : 0,
         remote.created_at,
         remote.updated_at,
-        remote.deleted_at,
       );
       continue;
     }
@@ -142,14 +139,13 @@ async function pullCategories(
     await db.runAsync(
       `UPDATE user_categories
        SET name = ?, slug = ?, sort_order = ?, is_default = ?,
-           updated_at = ?, deleted_at = ?, sync_status = 'synced'
+           updated_at = ?, sync_status = 'synced'
        WHERE local_id = ?;`,
       remote.name,
       remote.slug,
       remote.sort_order,
       remote.is_default ? 1 : 0,
       remote.updated_at,
-      remote.deleted_at,
       local.local_id,
     );
   }
@@ -160,9 +156,7 @@ async function pullCategories(
 async function pullTags(db: SQLiteDatabase, ctx: PullContext): Promise<void> {
   let query = supabase
     .from("UserTag")
-    .select(
-      "id, user_id, name, category, sort_order, created_at, updated_at, deleted_at",
-    )
+    .select("id, user_id, name, category, sort_order, created_at, updated_at")
     .eq("user_id", ctx.userId);
   if (ctx.since) query = query.gte("updated_at", ctx.since);
   const { data, error } = await query.returns<RemoteTagRow[]>();
@@ -178,8 +172,8 @@ async function pullTags(db: SQLiteDatabase, ctx: PullContext): Promise<void> {
       await db.runAsync(
         `INSERT OR IGNORE INTO user_tags
            (local_id, server_id, user_id, name, category, sort_order,
-            created_at, updated_at, deleted_at, sync_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced');`,
+            created_at, updated_at, sync_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synced');`,
         localId,
         remote.id,
         remote.user_id,
@@ -188,7 +182,6 @@ async function pullTags(db: SQLiteDatabase, ctx: PullContext): Promise<void> {
         remote.sort_order,
         remote.created_at,
         remote.updated_at,
-        remote.deleted_at,
       );
       continue;
     }
@@ -198,13 +191,12 @@ async function pullTags(db: SQLiteDatabase, ctx: PullContext): Promise<void> {
     await db.runAsync(
       `UPDATE user_tags
        SET name = ?, category = ?, sort_order = ?, updated_at = ?,
-           deleted_at = ?, sync_status = 'synced'
+           sync_status = 'synced'
        WHERE local_id = ?;`,
       remote.name,
       remote.category,
       remote.sort_order,
       remote.updated_at,
-      remote.deleted_at,
       local.local_id,
     );
   }
@@ -215,9 +207,7 @@ async function pullTags(db: SQLiteDatabase, ctx: PullContext): Promise<void> {
 async function pullPages(db: SQLiteDatabase, ctx: PullContext): Promise<void> {
   let query = supabase
     .from("TrainingPage")
-    .select(
-      "id, user_id, title, content, is_public, created_at, updated_at, deleted_at",
-    )
+    .select("id, user_id, title, content, is_public, created_at, updated_at")
     .eq("user_id", ctx.userId);
   if (ctx.since) query = query.gte("updated_at", ctx.since);
   const { data, error } = await query.returns<RemotePageRow[]>();
@@ -233,8 +223,8 @@ async function pullPages(db: SQLiteDatabase, ctx: PullContext): Promise<void> {
       await db.runAsync(
         `INSERT OR IGNORE INTO training_pages
            (local_id, server_id, user_id, title, content, is_public,
-            created_at, updated_at, deleted_at, sync_status, last_synced_at, sync_error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, NULL);`,
+            created_at, updated_at, sync_status, last_synced_at, sync_error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, NULL);`,
         localId,
         remote.id,
         remote.user_id,
@@ -243,7 +233,6 @@ async function pullPages(db: SQLiteDatabase, ctx: PullContext): Promise<void> {
         remote.is_public ? 1 : 0,
         remote.created_at,
         remote.updated_at,
-        remote.deleted_at,
         new Date().toISOString(),
       );
       continue;
@@ -254,13 +243,12 @@ async function pullPages(db: SQLiteDatabase, ctx: PullContext): Promise<void> {
     await db.runAsync(
       `UPDATE training_pages
        SET title = ?, content = ?, is_public = ?, updated_at = ?,
-           deleted_at = ?, sync_status = 'synced', last_synced_at = ?
+           sync_status = 'synced', last_synced_at = ?
        WHERE local_id = ?;`,
       remote.title,
       remote.content,
       remote.is_public ? 1 : 0,
       remote.updated_at,
-      remote.deleted_at,
       new Date().toISOString(),
       local.local_id,
     );
@@ -276,9 +264,7 @@ async function pullPageTags(
   // RLS でユーザーの page に紐付くものだけ取得される
   const { data, error } = await supabase
     .from("TrainingPageTag")
-    .select(
-      "id, training_page_id, user_tag_id, created_at, updated_at, deleted_at",
-    )
+    .select("id, training_page_id, user_tag_id, created_at, updated_at")
     .returns<RemotePageTagRow[]>();
   if (error) throw new Error(`pullPageTags: ${error.message}`);
 
@@ -304,15 +290,14 @@ async function pullPageTags(
     await db.runAsync(
       `INSERT OR IGNORE INTO training_page_tags
          (local_id, server_id, page_local_id, tag_local_id,
-          created_at, updated_at, deleted_at, sync_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'synced');`,
+          created_at, updated_at, sync_status)
+       VALUES (?, ?, ?, ?, ?, ?, 'synced');`,
       localId,
       remote.id,
       page.local_id,
       tag.local_id,
       remote.created_at,
       remote.updated_at,
-      remote.deleted_at,
     );
   }
 }
@@ -325,9 +310,7 @@ async function pullTrainingDates(
 ): Promise<void> {
   let query = supabase
     .from("TrainingDate")
-    .select(
-      "id, user_id, training_date, is_attended, created_at, updated_at, deleted_at",
-    )
+    .select("id, user_id, training_date, is_attended, created_at, updated_at")
     .eq("user_id", ctx.userId);
   if (ctx.since) query = query.gte("updated_at", ctx.since);
   const { data, error } = await query.returns<RemoteTrainingDateRow[]>();
@@ -343,8 +326,8 @@ async function pullTrainingDates(
       await db.runAsync(
         `INSERT OR IGNORE INTO training_dates
            (local_id, server_id, user_id, training_date, is_attended,
-            created_at, updated_at, deleted_at, sync_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synced');`,
+            created_at, updated_at, sync_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'synced');`,
         localId,
         remote.id,
         remote.user_id,
@@ -352,7 +335,6 @@ async function pullTrainingDates(
         remote.is_attended ? 1 : 0,
         remote.created_at,
         remote.updated_at,
-        remote.deleted_at,
       );
       continue;
     }
@@ -361,11 +343,10 @@ async function pullTrainingDates(
 
     await db.runAsync(
       `UPDATE training_dates
-       SET is_attended = ?, updated_at = ?, deleted_at = ?, sync_status = 'synced'
+       SET is_attended = ?, updated_at = ?, sync_status = 'synced'
        WHERE local_id = ?;`,
       remote.is_attended ? 1 : 0,
       remote.updated_at,
-      remote.deleted_at,
       local.local_id,
     );
   }
