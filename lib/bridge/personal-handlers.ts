@@ -20,6 +20,7 @@ import {
   createImageAttachmentFromBase64,
   listAttachmentsForPage,
   softDeleteAttachment,
+  touchAccessed,
 } from "@/lib/db/repositories/page-attachments";
 import {
   listTagsForPage,
@@ -44,10 +45,12 @@ import {
   softDeleteTrainingDate,
   upsertTrainingDate,
 } from "@/lib/db/repositories/training-dates";
+import type { PageAttachmentRow } from "@/lib/db/schema";
 import {
   getSyncUserId,
   runSync,
   type SyncScope,
+  triggerDownloadSync,
   triggerPushSync,
 } from "@/lib/sync/engine";
 
@@ -505,7 +508,8 @@ async function handleTrainingDatesRemove(payload: Record<string, unknown>) {
 
 // ============================== Attachments ==============================
 
-const ATTACHMENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const ATTACHMENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB (Web 版と統一)
+const ATTACHMENT_VIDEO_MAX_BYTES = 300 * 1024 * 1024; // 300 MB (Web 版と統一)
 const ATTACHMENT_MAX_COUNT_PER_PAGE = 5;
 const ALLOWED_IMAGE_MIMES = new Set([
   "image/jpeg",
@@ -513,31 +517,86 @@ const ALLOWED_IMAGE_MIMES = new Set([
   "image/png",
   "image/webp",
 ]);
+const ALLOWED_VIDEO_MIMES = new Set([
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+]);
+
+/**
+ * Web 版が `<img src>` / `<video src>` にそのまま渡せる URL を組み立てる。
+ * - ダウンロード済みかつ local_uri があれば file:// を返す (オフライン閲覧)
+ * - それ以外は remote_url (CloudFront / YouTube URL)
+ * - ローカル新規作成中 (upload_status='pending' で local_uri がある) も
+ *   file:// で表示可能
+ */
+function resolveDisplayUrl(row: PageAttachmentRow): string | null {
+  if (row.local_uri) return row.local_uri;
+  return row.remote_url;
+}
+
+/**
+ * Attachment 行を Web 版が期待する形に整形しつつ、表示用 URL を差し替える。
+ * 同時に last_accessed_at を更新 (LRU 用)。
+ */
+async function shapeAttachmentForWeb(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  row: PageAttachmentRow,
+) {
+  await touchAccessed(db, row.local_id);
+  return {
+    ...row,
+    url: resolveDisplayUrl(row),
+  };
+}
 
 async function handleAttachmentsList(payload: Record<string, unknown>) {
   const pageLocalId = requireString(payload, "pageLocalId");
   const db = await getDatabase();
-  return listAttachmentsForPage(db, pageLocalId);
+  const rows = await listAttachmentsForPage(db, pageLocalId);
+
+  // 未ダウンロード行があれば、表示要求のタイミングでバックグラウンドダウンロードを後押し
+  const needsDownload = rows.some(
+    (r) =>
+      r.remote_url !== null &&
+      r.local_uri === null &&
+      (r.download_status === "pending" ||
+        r.download_status === "failed" ||
+        r.download_status === null),
+  );
+  if (needsDownload) {
+    triggerDownloadSync();
+  }
+
+  return Promise.all(rows.map((r) => shapeAttachmentForWeb(db, r)));
 }
 
 async function handleAttachmentsCreate(payload: Record<string, unknown>) {
   const pageLocalId = requireString(payload, "pageLocalId");
   const base64 = requireString(payload, "base64");
-  const mimeType = requireString(payload, "mimeType");
+  const mimeType = requireString(payload, "mimeType").toLowerCase();
   const filename = requireString(payload, "filename");
   const sizeBytes = optionalNumber(payload, "sizeBytes") ?? 0;
   const sortOrder = optionalNumber(payload, "sortOrder");
 
-  if (!ALLOWED_IMAGE_MIMES.has(mimeType.toLowerCase())) {
+  const isImage = ALLOWED_IMAGE_MIMES.has(mimeType);
+  const isVideo = ALLOWED_VIDEO_MIMES.has(mimeType);
+  if (!isImage && !isVideo) {
     throw new BridgeHandlerError(
       "VALIDATION_ERROR",
-      `mimeType must be one of ${[...ALLOWED_IMAGE_MIMES].join(", ")}`,
+      `mimeType must be one of ${[
+        ...ALLOWED_IMAGE_MIMES,
+        ...ALLOWED_VIDEO_MIMES,
+      ].join(", ")}`,
     );
   }
-  if (sizeBytes > ATTACHMENT_IMAGE_MAX_BYTES) {
+  const sizeLimit = isImage
+    ? ATTACHMENT_IMAGE_MAX_BYTES
+    : ATTACHMENT_VIDEO_MAX_BYTES;
+  if (sizeBytes > sizeLimit) {
     throw new BridgeHandlerError(
       "LIMIT_EXCEEDED",
-      `image size exceeds ${ATTACHMENT_IMAGE_MAX_BYTES} bytes.`,
+      `${isImage ? "image" : "video"} size exceeds ${sizeLimit} bytes.`,
     );
   }
 
@@ -558,6 +617,14 @@ async function handleAttachmentsCreate(payload: Record<string, unknown>) {
     sizeBytes,
     sortOrder,
   });
+  if (isVideo) {
+    // ローカル DB 上の type を 'video' に直す (createImageAttachmentFromBase64 は
+    // 既存 API で type='image' 固定の INSERT を行うため)
+    await db.runAsync(
+      "UPDATE page_attachments SET type = 'video' WHERE local_id = ?;",
+      row.local_id,
+    );
+  }
   return { localId: row.local_id, localUri: row.local_uri };
 }
 
