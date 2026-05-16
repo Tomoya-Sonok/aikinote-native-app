@@ -12,13 +12,40 @@
 //   - 5 分おきの定期実行: runSync('push-only')
 //   - mutation 直後 (PERSONAL_PAGES_CREATE 等の成功時): runSync('push-only')
 
+import { getDatabase } from "@/lib/db";
+import { getMeta, setMeta } from "@/lib/db/repositories/sync-meta";
 import { pullAll } from "./pull";
 import { pushAll } from "./push";
+import { countPending } from "./queue";
 
 export type SyncScope = "full" | "incremental" | "push-only";
 
 export interface SyncOptions {
   userId: string;
+}
+
+export type SyncState = "idle" | "running" | "completed" | "failed";
+
+export interface SyncStatus {
+  state: SyncState;
+  scope?: SyncScope;
+  pending?: number;
+  error?: string;
+}
+
+type SyncStatusReporter = (status: SyncStatus) => void;
+let reporter: SyncStatusReporter | null = null;
+
+/**
+ * sync 進捗を Web 側へ送り出す reporter を登録 (Native → Web の back-channel)。
+ * app/index.tsx で sendToWebView を渡して使う。
+ */
+export function setSyncStatusReporter(r: SyncStatusReporter | null): void {
+  reporter = r;
+}
+
+function reportStatus(status: SyncStatus): void {
+  reporter?.(status);
 }
 
 let runningPromise: Promise<void> | null = null;
@@ -54,25 +81,42 @@ export function runSync(scope: SyncScope, options: SyncOptions): Promise<void> {
   }
 
   runningPromise = doSync(scope, options)
+    .then(async () => {
+      const db = await getDatabase();
+      const pending = await countPending(db);
+      reportStatus({ state: "completed", scope, pending });
+    })
     .catch((error) => {
       console.error(`[sync.engine] ${scope} で予期せぬエラー:`, error);
+      reportStatus({
+        state: "failed",
+        scope,
+        error: error instanceof Error ? error.message : String(error),
+      });
     })
     .finally(() => {
       runningPromise = null;
     });
 
+  reportStatus({ state: "running", scope });
   return runningPromise;
 }
 
 async function doSync(scope: SyncScope, options: SyncOptions): Promise<void> {
+  const db = await getDatabase();
+
   if (scope === "full" || scope === "incremental") {
-    await pullAll({
-      userId: options.userId,
-      since: scope === "incremental" ? null : null, // PR6 で incremental 起点を実装
-    });
+    const since =
+      scope === "incremental" ? await getMeta(db, "last_pull_at") : null;
+    await pullAll({ userId: options.userId, since });
+    await setMeta(db, "last_pull_at", new Date().toISOString());
   }
   // すべてのスコープで Push は実行する
   await pushAll({ userId: options.userId });
+
+  if (scope === "full") {
+    await setMeta(db, "initial_sync_done", "true");
+  }
 }
 
 /**
