@@ -276,13 +276,26 @@ async function pullPages(db: SQLiteDatabase, ctx: PullContext): Promise<void> {
 
 async function pullPageTags(
   db: SQLiteDatabase,
-  _ctx: PullContext,
+  ctx: PullContext,
 ): Promise<void> {
-  // RLS でユーザーの page に紐付くものだけ取得される
-  const { data, error } = await supabase
+  // TrainingPageTag テーブルには user_id カラムが無い (中間テーブル) ため、
+  // RLS でユーザー絞り込みが効くかが本番 DB 設定に依存して不安定。
+  // ローカルで pull 済みの training_pages.server_id 一覧を取り出し、
+  // training_page_id IN (...) で確実に該当ユーザーの行だけ取得する。
+  const userPages = await db.getAllAsync<{ server_id: string }>(
+    `SELECT server_id FROM training_pages
+     WHERE user_id = ? AND server_id IS NOT NULL;`,
+    ctx.userId,
+  );
+  if (userPages.length === 0) return;
+  const serverIds = userPages.map((p) => p.server_id);
+
+  let query = supabase
     .from("TrainingPageTag")
     .select("id, training_page_id, user_tag_id, created_at, updated_at")
-    .returns<RemotePageTagRow[]>();
+    .in("training_page_id", serverIds);
+  if (ctx.since) query = query.gte("updated_at", ctx.since);
+  const { data, error } = await query.returns<RemotePageTagRow[]>();
   if (error) throw new Error(`pullPageTags: ${error.message}`);
 
   for (const remote of data ?? []) {
