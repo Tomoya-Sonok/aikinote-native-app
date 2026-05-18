@@ -244,7 +244,18 @@ async function handlePagesList(payload: Record<string, unknown>) {
     endDate: optionalString(payload, "endDate"),
     sortOrder: optionalSortOrder(payload, "sortOrder"),
   });
-  return rows;
+
+  // 各ページに tags + attachments を埋め込んでから返す (N+1 だが SQLite ローカルなので許容)
+  return Promise.all(
+    rows.map(async (row) => {
+      const tags = await listTagsForPage(db, row.local_id);
+      const rawAttachments = await listAttachmentsForPage(db, row.local_id);
+      const attachments = await Promise.all(
+        rawAttachments.map((a) => shapeAttachmentForWeb(db, a)),
+      );
+      return { ...row, tags, attachments };
+    }),
+  );
 }
 
 async function handlePagesGet(payload: Record<string, unknown>) {
@@ -255,7 +266,11 @@ async function handlePagesGet(payload: Record<string, unknown>) {
     throw new BridgeHandlerError("NOT_FOUND", `Page not found: ${pageId}`);
   }
   const tags = await listTagsForPage(db, pageId);
-  return { ...page, tags };
+  const rawAttachments = await listAttachmentsForPage(db, pageId);
+  const attachments = await Promise.all(
+    rawAttachments.map((a) => shapeAttachmentForWeb(db, a)),
+  );
+  return { ...page, tags, attachments };
 }
 
 async function handlePagesCreate(payload: Record<string, unknown>) {
