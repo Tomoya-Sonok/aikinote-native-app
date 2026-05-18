@@ -1,5 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type WebView from "react-native-webview";
+import {
+  getWebViewEverLoaded,
+  setWebViewEverLoaded,
+} from "@/lib/storage/webview-storage";
 
 type WebViewState = {
   isLoading: boolean;
@@ -21,6 +25,24 @@ export function useWebView(initialUrl: string) {
     displayUrl: initialUrl,
   });
 
+  // アプリ再起動でも「過去にロード成功した実績」を AsyncStorage から復元する。
+  // これによりオフライン起動でも WebView の HTTP キャッシュからの復元を試みる
+  // (NetworkError 全画面を回避するため app/index.tsx で判定に使う)。
+  useEffect(() => {
+    let cancelled = false;
+    getWebViewEverLoaded().then((restored) => {
+      if (cancelled) return;
+      if (restored) {
+        setState((prev) =>
+          prev.hasEverLoaded ? prev : { ...prev, hasEverLoaded: true },
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const setLoaded = useCallback(() => {
     setState((prev) => ({
       ...prev,
@@ -28,6 +50,8 @@ export function useWebView(initialUrl: string) {
       hasError: false,
       hasEverLoaded: true,
     }));
+    // ベストエフォートで永続化 (失敗は無視)
+    void setWebViewEverLoaded(true);
   }, []);
 
   const setError = useCallback(() => {

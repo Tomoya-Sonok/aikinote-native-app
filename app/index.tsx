@@ -720,9 +720,18 @@ export default function HomeScreen() {
   }, [webView.navigateInWebView, locale]);
 
   // 完全なエラー画面の条件:
-  // - WebView の HTTP/JS エラー（hasError）
-  // - オフライン かつ 一度もロードできていない（キャッシュ表示の希望なし）
-  if (webView.hasError || (isOffline && !webView.hasEverLoaded)) {
+  // - WebView の HTTP/JS エラー（hasError）かつ過去にロード成功していない
+  //   → キャッシュも無さそうなので NetworkError を出す
+  // - オフライン かつ 過去にロード成功した実績もない（hasEverLoaded は
+  //   AsyncStorage から復元されるので、アプリ再起動後も保持される）
+  //   → キャッシュ表示の希望なし
+  // 過去にロード成功実績がある場合は WebView を表示し続け、HTTP キャッシュ
+  // からの復元 + Phase 5-a で導入した localStorage キャッシュからの API
+  // 応答展開を試みる (Part 2 ベストエフォート)。
+  if (
+    (webView.hasError && !webView.hasEverLoaded) ||
+    (isOffline && !webView.hasEverLoaded)
+  ) {
     return (
       <SafeAreaView style={styles.container}>
         <NetworkError isOffline={isOffline} onRetry={webView.reload} />
@@ -769,6 +778,7 @@ export default function HomeScreen() {
           url={webView.sourceUrl}
           webViewRef={webView.ref}
           searchHistoryJson={searchHistoryJson}
+          isOffline={isOffline}
           onLoadEnd={handleLoadEnd}
           onError={webView.setError}
           onMessage={handleMessage}

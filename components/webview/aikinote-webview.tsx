@@ -247,6 +247,12 @@ type AikinoteWebViewProps = {
   url: string;
   webViewRef: React.RefObject<WebView | null>;
   searchHistoryJson: string;
+  /**
+   * オフライン (NetInfo の isConnected === false) のとき true。
+   * Android では cacheMode='LOAD_CACHE_ELSE_NETWORK' に切り替えて
+   * HTTP キャッシュを優先する。オンライン時は LOAD_DEFAULT で最新取得。
+   */
+  isOffline?: boolean;
   onLoadEnd: () => void;
   onError: () => void;
   onMessage: (event: WebViewMessageEvent) => void;
@@ -257,6 +263,7 @@ export function AikinoteWebView({
   url,
   webViewRef,
   searchHistoryJson,
+  isOffline = false,
   onLoadEnd,
   onError,
   onMessage,
@@ -316,6 +323,11 @@ export function AikinoteWebView({
       sharedCookiesEnabled={true}
       thirdPartyCookiesEnabled={true}
       domStorageEnabled={true}
+      // HTTP キャッシュ: Android はオフライン時にキャッシュ優先で復元を試みる。
+      // iOS は WKWebView の cachePolicy が prop で直接設定できないため
+      // 既定のキャッシュ動作に依存 (将来 Service Worker 対応で対処予定)。
+      cacheEnabled={true}
+      cacheMode={isOffline ? "LOAD_CACHE_ELSE_NETWORK" : "LOAD_DEFAULT"}
       // ナビゲーション
       javaScriptEnabled={true}
       allowsBackForwardNavigationGestures={Platform.OS === "ios"}
