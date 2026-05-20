@@ -7,6 +7,7 @@
 //
 // プロトコル仕様の正は docs/webview-bridge-protocol.md。
 
+import * as FileSystem from "expo-file-system/legacy";
 import { getDatabase } from "@/lib/db";
 import {
   countCategories,
@@ -539,14 +540,41 @@ const ALLOWED_VIDEO_MIMES = new Set([
 ]);
 
 /**
- * Web 版が `<img src>` / `<video src>` にそのまま渡せる URL を組み立てる。
- * - ダウンロード済みかつ local_uri があれば file:// を返す (オフライン閲覧)
- * - それ以外は remote_url (CloudFront / YouTube URL)
- * - ローカル新規作成中 (upload_status='pending' で local_uri がある) も
- *   file:// で表示可能
+ * Web 版が `<img src>` / `<video src>` にそのまま渡せる URL に解決する。
+ *
+ * 重要: WebView は `https://www.aikinote.com` を HTTP origin で読み込んでおり、
+ * Web 版から `file://` リソースへの横断アクセスはブラウザセキュリティで
+ * 弾かれる (allowFileAccess 等の WebView prop は file:// origin 側でのみ効く)。
+ * そのため、ローカルキャッシュを直接 `file://` で返すと表示できない。
+ *
+ * 解決方針:
+ *   - 画像 (type='image') でローカルファイルがあれば base64 を読み出し、
+ *     `data:<mime>;base64,...` の data URI として Web に返す
+ *     (data URI は同一 origin 扱いで Web 側がそのまま読み込める)
+ *   - 動画 (type='video') / YouTube / 画像でローカル無し or 読み込み失敗
+ *     → remote_url (CloudFront / YouTube) を返す
+ *
+ * 動画の完全オフライン対応は別 PR (localhost HTTP サーバ案) で対応予定。
+ * 本関数は data URI 化で I/O コストがあるため、呼び出し側は Promise.all
+ * で並列化する。
  */
-function resolveDisplayUrl(row: PageAttachmentRow): string | null {
-  if (row.local_uri) return row.local_uri;
+async function resolveDisplayUrl(
+  row: PageAttachmentRow,
+): Promise<string | null> {
+  if (row.type === "image" && row.local_uri) {
+    try {
+      const base64 = await FileSystem.readAsStringAsync(row.local_uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const mime = row.mime_type ?? "image/jpeg";
+      return `data:${mime};base64,${base64}`;
+    } catch (error) {
+      console.warn(
+        "[shapeAttachmentForWeb] base64 read failed, fallback to remote_url:",
+        error,
+      );
+    }
+  }
   return row.remote_url;
 }
 
@@ -561,7 +589,7 @@ async function shapeAttachmentForWeb(
   await touchAccessed(db, row.local_id);
   return {
     ...row,
-    url: resolveDisplayUrl(row),
+    url: await resolveDisplayUrl(row),
   };
 }
 
