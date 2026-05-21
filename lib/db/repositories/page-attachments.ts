@@ -1,10 +1,16 @@
 // page_attachments テーブルの CRUD + Native File System 連携。
 //
-// 画像・動画はオフラインで Native FS の documentDirectory/attachments/<uuid>.<ext>
-// に保存し、SQLite には local_uri (file://) を持つ。
+// 画像・動画は Native FS の documentDirectory/attachments/<uuid>.<ext> に保存し、
+// SQLite には local_uri (file://) を持つ。ただし WebView は https origin の
+// Web 版を読み込んでおり、Web 側から file:// に直接アクセスできないため、
+// Web 表示用 URL は lib/bridge/personal-handlers.ts の shapeAttachmentForWeb で
+// 別途整形する (画像はその場で base64 → data URI 化、動画は CloudFront URL)。
+//
 // - ネイティブキャプチャ: ローカル保存 → lib/sync/attachments.ts が S3 にアップロード
 // - リモート(Web版で添付済み): lib/sync/download.ts が CloudFront からダウンロード
-//   して local_uri を埋める
+//   して local_uri を埋める (画像のオフライン閲覧 + LRU 管理のため。
+//   動画は現状ローカルキャッシュしても Web 表示には未使用、将来 localhost
+//   サーバ実装で活用予定)
 
 import { randomUUID } from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";

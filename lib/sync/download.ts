@@ -14,6 +14,14 @@
 // CloudFront URL は public 配信なので認証ヘッダ不要。
 // 容量見積もり: 1 GB 上限。動画 300MB を 3〜4 本まで保持可能。
 // 並列度 1 (順次)。同時実行ロックは isRunning フラグで担保。
+//
+// 利用状況:
+//   - 画像: shapeAttachmentForWeb で local_uri を base64 → data URI 化して
+//     Web 版に渡している (オフライン閲覧可)。
+//   - 動画: 現状ローカルキャッシュしても Web 表示には未使用 (WebView は
+//     https origin で file:// を読めないため)。将来の localhost HTTP サーバ
+//     実装で活用予定。動画の容量負担が問題になれば、暫定的に動画ダウンロード
+//     をスキップする最適化を別 PR で検討。
 
 import * as FileSystem from "expo-file-system/legacy";
 import type { SQLiteDatabase } from "expo-sqlite";

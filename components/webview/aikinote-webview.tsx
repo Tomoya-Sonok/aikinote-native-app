@@ -334,8 +334,13 @@ export function AikinoteWebView({
       allowsInlineMediaPlayback={true}
       mediaPlaybackRequiresUserAction={false}
       startInLoadingState={false}
-      // 「ひとりで」の画像オフライン対応 (PR5): Native FS に保存した
-      // file:// パスを <img src> から読めるよう許可する。
+      // file:// 関連の権限: 現状の WebView は https://www.aikinote.com を
+      // 読み込んでおり、HTTP origin から file:// リソースへの横断アクセスは
+      // ブラウザセキュリティで弾かれる (これらの prop は file:// origin 側で
+      // 読み込んだ Web ページからのアクセス制御で、HTTP origin への効力はない)。
+      // ローカル添付の Web 表示は personal-handlers.ts の shapeAttachmentForWeb で
+      // base64 data URI に変換して渡す方式で実現している。
+      // (true 設定は将来 file:// 起動した場合の保険として維持)
       allowFileAccess={true}
       allowFileAccessFromFileURLs={true}
       allowUniversalAccessFromFileURLs={true}
