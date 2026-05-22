@@ -247,12 +247,6 @@ type AikinoteWebViewProps = {
   url: string;
   webViewRef: React.RefObject<WebView | null>;
   searchHistoryJson: string;
-  /**
-   * オフライン (NetInfo の isConnected === false) のとき true。
-   * Android では cacheMode='LOAD_CACHE_ELSE_NETWORK' に切り替えて
-   * HTTP キャッシュを優先する。オンライン時は LOAD_DEFAULT で最新取得。
-   */
-  isOffline?: boolean;
   onLoadEnd: () => void;
   onError: () => void;
   onMessage: (event: WebViewMessageEvent) => void;
@@ -263,7 +257,6 @@ export function AikinoteWebView({
   url,
   webViewRef,
   searchHistoryJson,
-  isOffline = false,
   onLoadEnd,
   onError,
   onMessage,
@@ -323,24 +316,14 @@ export function AikinoteWebView({
       sharedCookiesEnabled={true}
       thirdPartyCookiesEnabled={true}
       domStorageEnabled={true}
-      // HTTP キャッシュ: Android はオフライン時にキャッシュ優先で復元を試みる。
-      // iOS は WKWebView の cachePolicy が prop で直接設定できないため
-      // 既定のキャッシュ動作に依存 (将来 Service Worker 対応で対処予定)。
-      cacheEnabled={true}
-      cacheMode={isOffline ? "LOAD_CACHE_ELSE_NETWORK" : "LOAD_DEFAULT"}
       // ナビゲーション
       javaScriptEnabled={true}
       allowsBackForwardNavigationGestures={Platform.OS === "ios"}
       allowsInlineMediaPlayback={true}
       mediaPlaybackRequiresUserAction={false}
       startInLoadingState={false}
-      // file:// 関連の権限: 現状の WebView は https://www.aikinote.com を
-      // 読み込んでおり、HTTP origin から file:// リソースへの横断アクセスは
-      // ブラウザセキュリティで弾かれる (これらの prop は file:// origin 側で
-      // 読み込んだ Web ページからのアクセス制御で、HTTP origin への効力はない)。
-      // ローカル添付の Web 表示は personal-handlers.ts の shapeAttachmentForWeb で
-      // base64 data URI に変換して渡す方式で実現している。
-      // (true 設定は将来 file:// 起動した場合の保険として維持)
+      // file:// オリジンの保険的な設定。現状の WebView は https origin で
+      // Web 版を読み込むため通常は効力なし。将来 file:// 起動する用途があれば活用。
       allowFileAccess={true}
       allowFileAccessFromFileURLs={true}
       allowUniversalAccessFromFileURLs={true}
