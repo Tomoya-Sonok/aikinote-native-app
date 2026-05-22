@@ -22,10 +22,6 @@ import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikinoteWebView } from "@/components/webview/aikinote-webview";
 import { useWebView } from "@/hooks/use-webview";
 import {
-  handlePersonalBridgeMessage,
-  isPersonalBridgeMessage,
-} from "@/lib/bridge/personal-handlers";
-import {
   buildLocalePath,
   getActiveTab,
   getHeaderType,
@@ -39,11 +35,6 @@ import {
   setNativeTutorialSeen,
 } from "@/lib/storage/webview-storage";
 import { supabase } from "@/lib/supabase";
-import {
-  runSync,
-  setSyncStatusReporter,
-  setSyncUserId,
-} from "@/lib/sync/engine";
 
 export default function HomeScreen() {
   const {
@@ -502,36 +493,6 @@ export default function HomeScreen() {
           const newUserId = data.payload.userId ?? null;
           setProfileImageUrl(data.payload.profileImageUrl ?? null);
           setUserId(newUserId);
-          // sync engine に userId を登録 / 解除
-          setSyncUserId(newUserId);
-
-          // Web 側から auth セッションも届く (PR4 系列の同期エンジン用)。
-          // 受信した access_token を supabase.auth.setSession に渡して、
-          // Native の Supabase クライアントが RLS 越しに sync 可能になる。
-          // 旧版 Web (token フィールド未送信) との互換性のため、token が
-          // 揃っていない場合は何もしない。
-          //
-          // ⚠️ ログアウト時に supabase.auth.signOut() を呼ばないこと。
-          // Supabase JS のデフォルトは scope: 'global' で、サーバー側で
-          // refresh_token を invalidate するため、Web 側 (WebView の cookie)
-          // の session も巻き添えで失効して強制ログアウトに至る。Native の
-          // Supabase クライアントは次回 USER_INFO で setSession が上書きする
-          // ため、明示的なクリアは不要。
-          const accessToken = data.payload.accessToken ?? null;
-          const refreshToken = data.payload.refreshToken ?? null;
-          if (newUserId && accessToken && refreshToken) {
-            supabase.auth
-              .setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken,
-              })
-              .catch((error) => {
-                console.warn(
-                  "[USER_INFO] supabase.auth.setSession に失敗:",
-                  error,
-                );
-              });
-          }
 
           // ログアウト検知（userId が null に変化）→ プッシュトークン削除
           if (!newUserId && pushTokenRef.current) {
@@ -588,11 +549,6 @@ export default function HomeScreen() {
         ) {
           // WebView から OAuth リクエスト（Google / Apple）
           handleNativeOAuth(data.payload.provider);
-        } else if (isPersonalBridgeMessage(data.type)) {
-          // 「ひとりで」(personal pages) のオフラインファースト用ブリッジ。
-          // 仕様: docs/webview-bridge-protocol.md
-          // 本 PR では skeleton で NOT_IMPLEMENTED を返す。
-          void handlePersonalBridgeMessage(data, sendToWebView);
         }
       } catch {
         // パースエラーは無視
@@ -639,53 +595,6 @@ export default function HomeScreen() {
     }
   }, [userId, identify, webView.executeScript]);
 
-  // 同期エンジンの配線:
-  //   - userId 取得後にアプリ起動相当の full sync を 1 回キック (Pull + Push)
-  //   - 5 分おきの定期 push-only sync
-  const syncStartedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!userId) {
-      syncStartedRef.current = null;
-      return;
-    }
-    if (syncStartedRef.current === userId) return;
-    syncStartedRef.current = userId;
-
-    void runSync("full", { userId });
-
-    const intervalId = setInterval(
-      () => {
-        void runSync("push-only", { userId });
-      },
-      5 * 60 * 1000,
-    );
-    return () => clearInterval(intervalId);
-  }, [userId]);
-
-  // sync 進捗 (PERSONAL_SYNC_STATUS) を Web 側に back-channel で通知。
-  // Web の SyncStatusBanner が受け取って進捗を表示する。
-  useEffect(() => {
-    setSyncStatusReporter((status) => {
-      sendToWebView(
-        "PERSONAL_SYNC_STATUS",
-        status as unknown as Record<string, unknown>,
-      );
-    });
-    return () => setSyncStatusReporter(null);
-  }, [sendToWebView]);
-
-  // NetInfo: 接続が false → true に遷移したら incremental sync をキック
-  const lastIsConnectedRef = useRef<boolean | null>(null);
-  useEffect(() => {
-    const wasConnected = lastIsConnectedRef.current;
-    const isConnectedNow = netInfo.isConnected;
-    lastIsConnectedRef.current = isConnectedNow ?? null;
-    if (!userId) return;
-    if (wasConnected === false && isConnectedNow === true) {
-      void runSync("incremental", { userId });
-    }
-  }, [netInfo.isConnected, userId]);
-
   // WebView に Premium 状態を通知
   const webViewRef = webView.ref;
   useEffect(() => {
@@ -720,18 +629,9 @@ export default function HomeScreen() {
   }, [webView.navigateInWebView, locale]);
 
   // 完全なエラー画面の条件:
-  // - WebView の HTTP/JS エラー（hasError）かつ過去にロード成功していない
-  //   → キャッシュも無さそうなので NetworkError を出す
-  // - オフライン かつ 過去にロード成功した実績もない（hasEverLoaded は
-  //   AsyncStorage から復元されるので、アプリ再起動後も保持される）
-  //   → キャッシュ表示の希望なし
-  // 過去にロード成功実績がある場合は WebView を表示し続け、HTTP キャッシュ
-  // からの復元 + Phase 5-a で導入した localStorage キャッシュからの API
-  // 応答展開を試みる (Part 2 ベストエフォート)。
-  if (
-    (webView.hasError && !webView.hasEverLoaded) ||
-    (isOffline && !webView.hasEverLoaded)
-  ) {
+  // - WebView の HTTP/JS エラー（hasError）
+  // - オフライン かつ 一度もロードできていない（キャッシュ表示の希望なし）
+  if (webView.hasError || (isOffline && !webView.hasEverLoaded)) {
     return (
       <SafeAreaView style={styles.container}>
         <NetworkError isOffline={isOffline} onRetry={webView.reload} />
@@ -778,7 +678,6 @@ export default function HomeScreen() {
           url={webView.sourceUrl}
           webViewRef={webView.ref}
           searchHistoryJson={searchHistoryJson}
-          isOffline={isOffline}
           onLoadEnd={handleLoadEnd}
           onError={webView.setError}
           onMessage={handleMessage}
