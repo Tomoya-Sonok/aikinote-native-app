@@ -36,6 +36,11 @@ import {
 } from "@/lib/storage/webview-storage";
 import { supabase } from "@/lib/supabase";
 
+// WebView の onLoadEnd から Web 側 USER_INFO postMessage が届くまでの最大待機時間。
+// 通常 hydration は数秒で完了するため、低速回線の余裕として 10 秒に設定。
+// 超えたら URL 単位で 1 度だけ自動リロード（stalledUrlRef で無限ループ防止済み）。
+const STALL_RELOAD_TIMEOUT_MS = 10000;
+
 export default function HomeScreen() {
   const {
     initialUrl,
@@ -105,7 +110,7 @@ export default function HomeScreen() {
     webView.setLoaded();
     onWebViewReady();
     // Web 側の React hydration が完了して useAuth が USER_INFO を postMessage するまで待機。
-    // 25 秒経っても届かなければ Suspense 等で詰まっているとみなし、URL 単位で 1 度だけ自動リロードする。
+    // STALL_RELOAD_TIMEOUT_MS を超えたら Suspense 等で詰まっているとみなし、URL 単位で 1 度だけ自動リロードする。
     clearStallTimer();
     const targetUrl = webView.sourceUrl;
     stallTimerRef.current = setTimeout(() => {
@@ -117,7 +122,7 @@ export default function HomeScreen() {
         targetUrl,
       );
       webView.reload();
-    }, 25000);
+    }, STALL_RELOAD_TIMEOUT_MS);
   }, [
     webView.setLoaded,
     webView.reload,
