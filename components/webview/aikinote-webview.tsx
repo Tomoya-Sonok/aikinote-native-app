@@ -90,15 +90,21 @@ const INJECTED_JS_AFTER_LOAD = `
   ${GET_HEADER_TYPE_JS}
   ${BUILD_CSS_JS}
 
-  // CSS を現在の URL に基づいて作成/更新
+  // CSS を現在の URL に基づいて作成/更新。
+  // 同じ URL パターン内の SPA 遷移（ページネーション等）で出力が変わらない場合は
+  // style.textContent 書き換えごとブラウザの再計算をスキップする。
+  var lastCSS = '';
   function updateCSS() {
+    var newCSS = buildNativeAppCSS();
     var style = document.getElementById('native-app-overrides');
+    if (style && newCSS === lastCSS) return;
     if (!style) {
       style = document.createElement('style');
       style.id = 'native-app-overrides';
       (document.head || document.documentElement).appendChild(style);
     }
-    style.textContent = buildNativeAppCSS();
+    style.textContent = newCSS;
+    lastCSS = newCSS;
   }
   updateCSS();
 
@@ -316,6 +322,11 @@ export function AikinoteWebView({
       sharedCookiesEnabled={true}
       thirdPartyCookiesEnabled={true}
       domStorageEnabled={true}
+      // キャッシュ・描画設定: 2 回目以降の起動を速くする + Android スクロール時の FPS 改善
+      // androidLayerType="hardware" は GPU 描画。万一描画乱れが出るデバイスがあれば none に戻す
+      cacheEnabled={true}
+      incognito={false}
+      androidLayerType="hardware"
       // ナビゲーション
       javaScriptEnabled={true}
       allowsBackForwardNavigationGestures={Platform.OS === "ios"}
