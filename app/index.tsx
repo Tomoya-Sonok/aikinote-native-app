@@ -29,7 +29,11 @@ import {
   type TabId,
 } from "@/lib/navigation/tab-utils";
 import { useRevenueCat } from "@/lib/purchases/RevenueCatProvider";
-import { registerForPushNotifications } from "@/lib/push-notifications";
+import {
+  registerForPushNotifications,
+  requestNotificationPermission,
+} from "@/lib/push-notifications";
+import { rescheduleRetentionReminder } from "@/lib/retention-notification";
 import {
   saveSearchHistory,
   setNativeTutorialSeen,
@@ -528,6 +532,10 @@ export default function HomeScreen() {
         } else if (data.type === "TUTORIAL_COMPLETED") {
           // チュートリアル完了通知: 次回起動時に /native-onboarding をスキップさせる
           void setNativeTutorialSeen(true);
+          // 未ログインユーザーにもリテンション通知を届けるため、この時点で通知許可を前倒しでリクエストする
+          requestNotificationPermission().then((granted) => {
+            if (granted) void rescheduleRetentionReminder();
+          });
         } else if (data.type === "INITIATE_IAP") {
           // WebView から購入リクエスト: planType が指定されていれば該当パッケージを直接購入、
           // なければ Paywall にフォールバック
@@ -582,6 +590,8 @@ export default function HomeScreen() {
     if (userId && !pushTokenRegisteredRef.current) {
       pushTokenRegisteredRef.current = true;
       registerForPushNotifications().then((pushToken) => {
+        // ログイン時に初めて通知許可が下りたケースに備え、リテンション通知をここでも予約する
+        void rescheduleRetentionReminder();
         if (pushToken) {
           pushTokenRef.current = pushToken;
           webView.executeScript(`

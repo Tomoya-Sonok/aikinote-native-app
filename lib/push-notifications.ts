@@ -15,6 +15,20 @@ export async function setupNotificationChannel(): Promise<void> {
 }
 
 /**
+ * 通知の許可状態を確認し、未確定なら OS の許可ダイアログを表示する。
+ * 許可されていれば true を返す（既に許可済みの場合はダイアログを出さない）。
+ */
+export async function requestNotificationPermission(): Promise<boolean> {
+  if (!Notifications) return false;
+
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  if (existingStatus === "granted") return true;
+
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === "granted";
+}
+
+/**
  * プッシュ通知の許可を取得し、Expo Push Token を返す。
  * 許可されなかった場合、シミュレーターの場合、または expo-notifications が
  * 利用できない場合は null を返す。
@@ -33,15 +47,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
     return null;
   }
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== "granted") {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== "granted") {
+  const granted = await requestNotificationPermission();
+  if (!granted) {
     console.log("[Push] プッシュ通知の許可が得られませんでした");
     return null;
   }
