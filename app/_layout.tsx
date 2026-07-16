@@ -18,7 +18,6 @@ import {
 } from "react";
 import { config } from "@/constants/config";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useRetentionReminder } from "@/hooks/use-retention-reminder";
 import { toWebUrl } from "@/lib/deep-link";
 import { Notifications } from "@/lib/notifications";
 import { RevenueCatProvider } from "@/lib/purchases/RevenueCatProvider";
@@ -131,9 +130,6 @@ export default function RootLayout() {
   useEffect(() => {
     setupNotificationChannel();
   }, []);
-
-  // アプリ利用のたびにリテンション通知（7日未利用リマインダー）を予約し直す
-  useRetentionReminder();
 
   // 通知タップ → 通知 data が指す画面に遷移
   useEffect(() => {

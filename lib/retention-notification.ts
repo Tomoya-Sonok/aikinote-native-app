@@ -22,6 +22,22 @@ export function calcNextRetentionTriggerAt(nowMs: number): Date {
 }
 
 /**
+ * リテンション通知のローカル予約を取り消す。
+ * ログイン中はサーバー側 Cron が同じ通知を送るため、二重通知を避けるべくこちらを使う。
+ */
+export async function cancelRetentionReminder(): Promise<void> {
+  if (!Notifications) return;
+
+  try {
+    await Notifications.cancelScheduledNotificationAsync(
+      RETENTION_NOTIFICATION_ID,
+    );
+  } catch (error) {
+    console.warn("[Retention] リマインダーのキャンセルに失敗:", error);
+  }
+}
+
+/**
  * 既存のリテンション通知予約をキャンセルし、7日後以降の最初の 20:00 JST に1件だけ再予約する。
  * 通知未許可の場合、または expo-notifications が利用できない場合（iOS Simulator）は何もしない。
  */
