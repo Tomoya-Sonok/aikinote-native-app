@@ -74,6 +74,23 @@ function shouldHandleDeepLink(url: string): boolean {
   return true;
 }
 
+// 通知の data から遷移先の Web URL を解決する。
+// - postId: 既存のソーシャル通知形式（該当投稿へ遷移）
+// - url: "/" 始まりの相対パスのみ許可（"//" はプロトコル相対URLで外部ホストへ遷移し得るため拒否）
+function resolveNotificationUrl(
+  data: Record<string, unknown> | undefined,
+): string | null {
+  const postId = data?.postId;
+  if (typeof postId === "string" && postId) {
+    return `${config.webBaseUrl}/social/posts/${postId}`;
+  }
+  const url = data?.url;
+  if (typeof url === "string" && url.startsWith("/") && !url.startsWith("//")) {
+    return `${config.webBaseUrl}${url}`;
+  }
+  return null;
+}
+
 const AppContext = createContext<AppContextValue>({
   initialUrl: NATIVE_INITIAL_URL,
   onWebViewReady: () => {},
@@ -114,28 +131,28 @@ export default function RootLayout() {
     setupNotificationChannel();
   }, []);
 
-  // 通知タップ → 該当投稿に遷移
+  // 通知タップ → 通知 data が指す画面に遷移
   useEffect(() => {
     if (!Notifications) return;
 
     // コールドスタート: アプリ起動のきっかけとなった通知を処理
     Notifications.getLastNotificationResponseAsync().then((response) => {
-      const postId = response?.notification.request.content.data?.postId as
-        | string
-        | undefined;
-      if (postId) {
-        setPendingDeepLink(`${config.webBaseUrl}/social/posts/${postId}`);
+      const target = resolveNotificationUrl(
+        response?.notification.request.content.data,
+      );
+      if (target) {
+        setPendingDeepLink(target);
       }
     });
 
     // ウォームスタート: アプリ実行中の通知タップを処理
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
-        const postId = response.notification.request.content.data?.postId as
-          | string
-          | undefined;
-        if (postId) {
-          setPendingDeepLink(`${config.webBaseUrl}/social/posts/${postId}`);
+        const target = resolveNotificationUrl(
+          response.notification.request.content.data,
+        );
+        if (target) {
+          setPendingDeepLink(target);
         }
       },
     );

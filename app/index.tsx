@@ -1,7 +1,13 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, Platform, StyleSheet, View } from "react-native";
+import {
+  AppState,
+  BackHandler,
+  Platform,
+  StyleSheet,
+  View,
+} from "react-native";
 import { PACKAGE_TYPE } from "react-native-purchases";
 import RevenueCatUI from "react-native-purchases-ui";
 import {
@@ -40,6 +46,11 @@ import { supabase } from "@/lib/supabase";
 // 通常 hydration は数秒で完了するため、低速回線の余裕として 10 秒に設定。
 // 超えたら URL 単位で 1 度だけ自動リロード（stalledUrlRef で無限ループ防止済み）。
 const STALL_RELOAD_TIMEOUT_MS = 10000;
+
+// フォアグラウンド復帰時にプッシュトークンを再登録する最短間隔。
+// UPSERT で UserPushToken.updated_at が更新され、サーバー側リテンション通知の
+// 「最終利用から7日」判定の元データになるため、コールドスタート以外でも定期的に更新する。
+const PUSH_TOKEN_TOUCH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export default function HomeScreen() {
   const {
@@ -80,6 +91,7 @@ export default function HomeScreen() {
   // WebView stall 検出: onLoadEnd 後に Web 側 USER_INFO が届かない場合のリロード制御
   const stallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stalledUrlRef = useRef<string | null>(null);
+  const lastTokenPostAtRef = useRef(0);
 
   // Android: 戻るボタンで WebView 内の履歴を戻る
   useEffect(() => {
@@ -572,6 +584,26 @@ export default function HomeScreen() {
     ],
   );
 
+  // プッシュトークンをサーバーに登録する。UPSERT で UserPushToken.updated_at が更新されるため、
+  // サーバー側リテンション通知が参照する「最終利用日時」の更新も兼ねる
+  const postPushToken = useCallback(
+    (pushToken: string) => {
+      lastTokenPostAtRef.current = Date.now();
+      webView.executeScript(`
+        fetch('/api/push-tokens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expo_push_token: '${pushToken}',
+            platform: '${Platform.OS}'
+          }),
+          credentials: 'include'
+        }).catch(function(e) { console.error('Push token registration error:', e); });
+      `);
+    },
+    [webView.executeScript],
+  );
+
   // userId 取得後に RevenueCat に identify + プッシュトークン登録
   useEffect(() => {
     if (userId && !identifiedRef.current) {
@@ -584,21 +616,27 @@ export default function HomeScreen() {
       registerForPushNotifications().then((pushToken) => {
         if (pushToken) {
           pushTokenRef.current = pushToken;
-          webView.executeScript(`
-            fetch('/api/push-tokens', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                expo_push_token: '${pushToken}',
-                platform: '${Platform.OS}'
-              }),
-              credentials: 'include'
-            }).catch(function(e) { console.error('Push token registration error:', e); });
-          `);
+          postPushToken(pushToken);
         }
       });
     }
-  }, [userId, identify, webView.executeScript]);
+  }, [userId, identify, postPushToken]);
+
+  // フォアグラウンド復帰時にトークンを再登録して最終利用日時（updated_at）を更新する。
+  // コールドスタートを長期間挟まない利用でもサーバー側の7日未利用判定が正しく働くようにする
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || !userId || !pushTokenRef.current) return;
+      if (
+        Date.now() - lastTokenPostAtRef.current <
+        PUSH_TOKEN_TOUCH_INTERVAL_MS
+      ) {
+        return;
+      }
+      postPushToken(pushTokenRef.current);
+    });
+    return () => subscription.remove();
+  }, [userId, postPushToken]);
 
   // WebView に Premium 状態を通知
   const webViewRef = webView.ref;
