@@ -26,7 +26,6 @@ import {
 } from "@/components/splash/animated-splash";
 import { NativeTabBar } from "@/components/tab-bar/native-tab-bar";
 import { AikinoteWebView } from "@/components/webview/aikinote-webview";
-import { useRetentionReminder } from "@/hooks/use-retention-reminder";
 import { useWebView } from "@/hooks/use-webview";
 import {
   buildLocalePath,
@@ -36,11 +35,7 @@ import {
   type TabId,
 } from "@/lib/navigation/tab-utils";
 import { useRevenueCat } from "@/lib/purchases/RevenueCatProvider";
-import {
-  registerForPushNotifications,
-  requestNotificationPermission,
-} from "@/lib/push-notifications";
-import { rescheduleRetentionReminder } from "@/lib/retention-notification";
+import { registerForPushNotifications } from "@/lib/push-notifications";
 import {
   saveSearchHistory,
   setNativeTutorialSeen,
@@ -97,10 +92,6 @@ export default function HomeScreen() {
   const stallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stalledUrlRef = useRef<string | null>(null);
   const lastTokenPostAtRef = useRef(0);
-
-  // リテンション通知（7日未利用リマインダー）:
-  // 未ログイン時はローカル通知を予約し、ログイン済みならサーバー側 Cron に任せて予約を解除する
-  useRetentionReminder(userId);
 
   // Android: 戻るボタンで WebView 内の履歴を戻る
   useEffect(() => {
@@ -549,10 +540,6 @@ export default function HomeScreen() {
         } else if (data.type === "TUTORIAL_COMPLETED") {
           // チュートリアル完了通知: 次回起動時に /native-onboarding をスキップさせる
           void setNativeTutorialSeen(true);
-          // 未ログインユーザーにもリテンション通知を届けるため、この時点で通知許可を前倒しでリクエストする
-          requestNotificationPermission().then((granted) => {
-            if (granted) void rescheduleRetentionReminder();
-          });
         } else if (data.type === "INITIATE_IAP") {
           // WebView から購入リクエスト: planType が指定されていれば該当パッケージを直接購入、
           // なければ Paywall にフォールバック
