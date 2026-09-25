@@ -504,6 +504,13 @@ export default function HomeScreen() {
           const json = JSON.stringify(data.payload);
           updateSearchHistoryJson(json);
           saveSearchHistory(data.payload);
+        } else if (
+          data.type === "ROUTE_CHANGED" &&
+          typeof data.payload?.url === "string"
+        ) {
+          // Web 版のクライアント遷移（router.push）では onNavigationStateChange が
+          // 届かないことがあるため、Web から通知された URL でタブ選択・ヘッダー種別を更新する
+          webView.setDisplayUrl(data.payload.url);
         } else if (data.type === "USER_INFO" && data.payload) {
           // hydration が成功して USER_INFO が届いた → stall タイマー解除
           clearStallTimer();
@@ -580,6 +587,7 @@ export default function HomeScreen() {
       isPremium,
       handleNativeOAuth,
       webView.executeScript,
+      webView.setDisplayUrl,
       clearStallTimer,
     ],
   );

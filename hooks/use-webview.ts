@@ -68,13 +68,19 @@ export function useWebView(initialUrl: string) {
   }, []);
 
   // WebView 内でパス遷移（source.uri は変更しない）
-  // location.assign を優先し、失敗時に location.href にフォールバック
+  // Web 版の NativeNavigationBridge（window.__aikinoteNavigate）があれば Next.js のクライアント遷移を使う。
+  // ページ全体を読み込み直さないため、タブ切替で SSR・JS 起動・認証初期化・全データ取得をやり直さずに済む。
+  // ブリッジが無い（旧 Web 版・読み込み途中）場合は location.assign → location.href にフォールバック
   // （iOS Simulator + 一部のページ遷移で href 直代入が無視されるケースを回避）
   const navigateInWebView = useCallback((path: string) => {
     ref.current?.injectJavaScript(`
       (function() {
-        try { window.location.assign(${JSON.stringify(path)}); }
-        catch (e) { window.location.href = ${JSON.stringify(path)}; }
+        var path = ${JSON.stringify(path)};
+        try {
+          if (typeof window.__aikinoteNavigate === 'function' && window.__aikinoteNavigate(path)) return;
+        } catch (e) {}
+        try { window.location.assign(path); }
+        catch (e) { window.location.href = path; }
       })();
       true;
     `);

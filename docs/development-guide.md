@@ -322,6 +322,7 @@ URL に応じてネイティブヘッダーと Web 版ヘッダーを切り替�
 | `SHOW_CUSTOMER_CENTER` | Web → Native | サブスクリプション管理画面を表示 |
 | `GET_SUBSCRIPTION_STATUS` | Web → Native | サブスクリプション状態の問い合わせ |
 | `START_NATIVE_OAUTH` | Web → Native | Google / Apple OAuth フロー開始 |
+| `ROUTE_CHANGED` | Web → Native | Web 版 `NativeNavigationBridge` がパス変更ごとに `{ url }` を送信。クライアント遷移では `onNavigationStateChange` が届かないことがあるため、`displayUrl`（タブ選択・ヘッダー種別）の更新に使用 |
 | `IAP_RESULT` | Native → Web | Paywall 結果（購入成功/失敗）を返却 |
 | `SUBSCRIPTION_STATUS` | Native → Web | サブスクリプション状態を返却 |
 
@@ -330,7 +331,11 @@ URL に応じてネイティブヘッダーと Web 版ヘッダーを切り替�
 `use-webview.ts` で 2 つの URL を分離管理：
 
 - **`sourceUrl`**: WebView の `source.uri` に渡す URL。ディープリンク等の外部ナビゲーション時のみ変更
-- **`displayUrl`**: `onNavigationStateChange` で更新。タブ判定・ヘッダー切替に使用。`sourceUrl` は変更しない（二重ナビゲーション防止）
+- **`displayUrl`**: `onNavigationStateChange` と Web からの `ROUTE_CHANGED` で更新。タブ判定・ヘッダー切替に使用。`sourceUrl` は変更しない（二重ナビゲーション防止）
+
+### タブ・ロゴ・通知・検索からの画面遷移
+
+`navigateInWebView`（`hooks/use-webview.ts`）は、Web 版が公開する `window.__aikinoteNavigate(path)` があればそれを呼び、Next.js のクライアント遷移（`router.push`）で画面を切り替える。ページ全体を読み込み直さないため、タブ切替で SSR・JS 起動・認証初期化・全データ取得をやり直さずに済む。ブリッジが無い場合（読み込み途中・旧 Web 版）は `location.assign` にフォールバックする。
 
 ## Web 版との関係
 
