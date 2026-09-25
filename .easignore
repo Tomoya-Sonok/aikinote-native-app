@@ -48,6 +48,7 @@ app-example
 # EAS local build artifacts
 build-*.tar.gz
 *.apk
+*.aab
 
 # Firebase Admin SDK（クライアント用 google-services.json は含める）
 *-firebase-adminsdk-*.json

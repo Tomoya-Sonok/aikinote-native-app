@@ -47,6 +47,7 @@ app-example
 # EAS local build artifacts
 build-*.tar.gz
 *.apk
+*.aab
 
 # Firebase
 google-services.json
