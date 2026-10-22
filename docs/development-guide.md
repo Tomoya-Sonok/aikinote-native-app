@@ -135,7 +135,7 @@ Apple App Store Guideline 4.2 系のラッパーアプリ審査リスクを下�
 | Linter / Formatter | Biome（Web 版と同一ルール） |
 | ビルド / デプロイ | EAS Build / EAS Submit |
 | パッケージマネージャー | pnpm 8.15.4 |
-| ランタイム管理 | mise（Node.js 22.22.0） |
+| ランタイム管理 | mise（Node.js 22.23.4） |
 
 ## 開発コマンド
 
